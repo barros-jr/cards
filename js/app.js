@@ -110,7 +110,7 @@ function controlesEstudo() {
   wrap.append(
     el("div", { classe: "bloco" }, [
       el("div", { classe: "rotulo", texto: "Como responder?" }),
-      el("div", { classe: "segmentos" }, [segResp("Ver", "ver"), segResp("Digitar", "digitar"), segResp("Múltipla", "multipla")]),
+      el("div", { classe: "segmentos" }, [segResp("Ver", "ver"), segResp("Digitar", "digitar"), segResp("Múltipla", "multipla"), segResp("Ouvir", "ouvir")]),
     ])
   );
   wrap.append(el("div", { classe: "bloco" }, [chipDificeis()]));

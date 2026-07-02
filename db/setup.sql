@@ -36,6 +36,7 @@ create table if not exists public.cards (
   cloze_text text,
   audio_url text,
   tts_lang text,
+  example text,            -- frase de exemplo (contexto i+1), mostrada no verso
   tags text[] not null default '{}',
   created_at timestamptz not null default now()
 );
@@ -55,6 +56,7 @@ create table if not exists public.card_progress (
   lapses integer,
   state smallint,          -- 0=New, 1=Learning, 2=Review, 3=Relearning
   dificil boolean not null default false, -- marcado como difícil pelo usuário
+  direcao text not null default 'rec' check (direcao in ('rec','prod')), -- rec = L2->PT; prod = PT->L2
   last_review timestamptz,
   created_at timestamptz not null default now(), -- quando o card foi visto pela 1ª vez (teto de novos/dia)
   updated_at timestamptz not null default now()
@@ -69,7 +71,7 @@ create table if not exists public.daily_activity (
 );
 
 -- ---------- Índices / unicidade ----------
-create unique index if not exists idx_card_progress_user_card on public.card_progress (user_id, card_id);
+create unique index if not exists idx_card_progress_user_card_dir on public.card_progress (user_id, card_id, direcao);
 create index if not exists idx_card_progress_user_due on public.card_progress (user_id, due);
 create unique index if not exists idx_daily_activity_user_date on public.daily_activity (user_id, date);
 create index if not exists idx_cards_deck on public.cards (deck_id);

@@ -39,6 +39,7 @@ export async function abrirEditor(card = null, ctx = {}) {
       deckId: card?.deck_id || ctx.deckId || (lista[0] && lista[0].id) || null,
       front: card?.front || "",
       back: card?.back || "",
+      example: card?.example || "",
       cloze_text: card?.cloze_text || "",
       novoDeck: semDecks && !ctx.deckId,
       novoDeckNome: "",
@@ -58,6 +59,7 @@ function capturar() {
   const v = (sel) => document.querySelector(sel);
   if (v("#ed-front")) e.front = v("#ed-front").value;
   if (v("#ed-back")) e.back = v("#ed-back").value;
+  if (v("#ed-exemplo")) e.example = v("#ed-exemplo").value;
   if (v("#ed-cloze")) e.cloze_text = v("#ed-cloze").value;
   if (v("#ed-novodeck-nome")) e.novoDeckNome = v("#ed-novodeck-nome").value;
 }
@@ -133,6 +135,7 @@ async function salvar() {
     type: e.tipo,
     front: e.tipo === "basic" ? e.front.trim() : null,
     back: e.back.trim() || null,
+    example: e.tipo === "basic" ? e.example.trim() || null : null,
     cloze_text: e.tipo === "cloze" ? e.cloze_text.trim() : null,
     tts_lang: ttsDe(idiomaCod),
   };
@@ -223,6 +226,8 @@ export function renderEditor(raiz) {
   if (e.tipo === "basic") {
     main.append(grupo("Frente (o que se aprende)", el("input", { classe: "campo", id: "ed-front", value: e.front, placeholder: "Ex.: hola" })));
     main.append(grupo("Verso (tradução / resposta)", el("input", { classe: "campo", id: "ed-back", value: e.back, placeholder: "Ex.: olá" })));
+    main.append(grupo("Frase de exemplo (opcional, recomendado)", el("input", { classe: "campo", id: "ed-exemplo", value: e.example, placeholder: "Ex.: ¡Hola! ¿Cómo estás?" })));
+    main.append(el("p", { classe: "dica", texto: "Uma frase curta usando a palavra ajuda muito a memorizar." }));
   } else {
     const ta = el("textarea", { classe: "campo", id: "ed-cloze", placeholder: "Ex.: El gato bebe [leche]" });
     ta.value = e.cloze_text;

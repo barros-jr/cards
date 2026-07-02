@@ -1,16 +1,28 @@
 /* =========================================================
    study.js — sessão de estudo (Revisão / Prática livre),
-   modos de resposta (ver / digitar / múltipla escolha),
-   montagem da fila, dados do painel e gravação no Supabase.
+   direções de card (reconhecimento / produção), modos de
+   resposta (ver / digitar / múltipla / ouvir), fila, painel
+   e gravação no Supabase.
+
+   Direções (metodologia):
+   - 'rec'  = reconhecimento: vê o idioma (L2) → lembra o português.
+   - 'prod' = produção: vê o português → produz o idioma (L2).
+   Cada direção tem agendamento FSRS PRÓPRIO (linha própria em
+   card_progress). Cards cloze têm só 'rec' (a lacuna já é produção).
    ========================================================= */
 
 import { supabase } from "./supabase.js";
 import { USUARIO_ID, TETO_CARDS_NOVOS } from "./config.js";
 import * as srs from "./srs.js";
-import { tocarCard } from "./audio.js";
+import { tocarCard, falar } from "./audio.js";
 import { state, atualizar, el, icone } from "./state.js";
 
 const UID = USUARIO_ID;
+
+// Quais direções se aplicam a um card.
+function direcoesDe(card) {
+  return card.type === "cloze" ? ["rec"] : ["rec", "prod"];
+}
 
 /* ---------------- Dados (Supabase) ---------------- */
 
@@ -23,6 +35,8 @@ export async function carregarIdiomas() {
   return [...new Set((data || []).map((r) => r.language).filter(Boolean))].sort();
 }
 
+/* Busca cards (por idioma) + progresso do usuário nas DUAS direções.
+   Devolve [{ card, prog: { rec: linha|null, prod: linha|null } }]. */
 async function buscarCardsComProgresso(idioma) {
   let consulta = supabase.from("cards").select("*");
   if (idioma && idioma !== "todos") consulta = consulta.eq("language", idioma);
@@ -43,10 +57,14 @@ async function buscarCardsComProgresso(idioma) {
     if (e2) console.warn("Erro ao buscar progresso:", e2);
     progressos = prog || [];
   }
-  const mapa = new Map(progressos.map((p) => [p.card_id, p]));
-  return lista.map((c) => ({ card: c, progresso: mapa.get(c.id) || null }));
+  const mapa = new Map(progressos.map((p) => [`${p.card_id}|${p.direcao || "rec"}`, p]));
+  return lista.map((c) => ({
+    card: c,
+    prog: { rec: mapa.get(`${c.id}|rec`) || null, prod: mapa.get(`${c.id}|prod`) || null },
+  }));
 }
 
+// Quantas "entradas" novas (card+direção) já foram introduzidas hoje.
 async function contarNovosHoje() {
   const { count, error } = await supabase
     .from("card_progress")
@@ -61,12 +79,18 @@ async function contarNovosHoje() {
   return count || 0;
 }
 
-/* Contagens da Home (pendentes do idioma atual + foguinho). */
+/* Contagens da Home. Cada card+direção conta como uma entrada. */
 export async function carregarContagens() {
   const lista = await buscarCardsComProgresso(state.idioma);
   const agora = new Date();
-  const due = lista.filter((x) => x.progresso && srs.estaVencido(x.progresso, agora)).length;
-  const novosDisponiveis = lista.filter((x) => !x.progresso).length;
+  let due = 0, novosDisponiveis = 0;
+  for (const x of lista) {
+    for (const dir of direcoesDe(x.card)) {
+      const p = x.prog[dir];
+      if (p && srs.estaVencido(p, agora)) due++;
+      if (!p) novosDisponiveis++;
+    }
+  }
   const introduzidos = await contarNovosHoje();
   const novos = Math.min(novosDisponiveis, Math.max(0, TETO_CARDS_NOVOS - introduzidos));
   const { streak, estudouHoje } = await resumoFoguinho();
@@ -78,9 +102,8 @@ export async function carregarContagens() {
   });
 }
 
-/* Dados do painel: gráfico da semana, números e palavra do dia. */
+/* Dados do painel (gráfico da semana, números, palavra do dia). */
 export async function carregarPainel() {
-  // Gráfico "Sua semana" (últimos 7 dias).
   const hoje = new Date();
   hoje.setHours(0, 0, 0, 0);
   const sete = new Date(hoje);
@@ -100,15 +123,15 @@ export async function carregarPainel() {
     semana.push({ date: key, label: rotulos[d.getDay()], count: mapa.get(key) || 0 });
   }
 
-  // Números: total de cards e quantos já estão "dominados" (state Review).
   const { count: total } = await supabase.from("cards").select("id", { count: "exact", head: true });
+  // "Dominados" conta a direção de reconhecimento (comparável ao total de cards).
   const { count: dominados } = await supabase
     .from("card_progress")
     .select("id", { count: "exact", head: true })
     .eq("user_id", UID)
-    .eq("state", 2);
+    .eq("state", 2)
+    .eq("direcao", "rec");
 
-  // Palavra do dia: um card escolhido de forma estável pela data.
   const { data: cards } = await supabase.from("cards").select("*").limit(1000);
   let palavraDia = null;
   if (cards && cards.length) {
@@ -119,34 +142,61 @@ export async function carregarPainel() {
   atualizar({ semana, stats: { total: total || 0, dominados: dominados || 0 }, palavraDia });
 }
 
-// Monta a fila conforme o modo (e o filtro "só difíceis").
+/* Fila: itens = { card, direcao, progresso, novo }. */
 async function montarFila(idioma, modo, { soDificeis = false } = {}) {
-  let lista = await buscarCardsComProgresso(idioma);
-  if (soDificeis) lista = lista.filter((x) => x.progresso && x.progresso.dificil);
+  const lista = await buscarCardsComProgresso(idioma);
 
   if (modo === "pratica") {
-    const arr = lista.slice();
+    // Prática livre: só reconhecimento (navegação leve), embaralhado.
+    let arr = lista.map((x) => ({ card: x.card, direcao: "rec", progresso: x.prog.rec, novo: !x.prog.rec }));
+    if (soDificeis) arr = arr.filter((i) => i.progresso && i.progresso.dificil);
     embaralhar(arr);
-    return arr.map((x) => ({ card: x.card, progresso: x.progresso, novo: !x.progresso }));
+    return arr;
   }
 
+  // Revisão: vencidos (por due) + novos até o teto (rec antes de prod por card).
   const agora = new Date();
-  const vencidos = lista
-    .filter((x) => x.progresso && srs.estaVencido(x.progresso, agora))
-    .sort((a, b) => new Date(a.progresso.due) - new Date(b.progresso.due));
+  let vencidos = [];
+  let candidatosNovos = [];
+  for (const x of lista) {
+    for (const dir of direcoesDe(x.card)) {
+      const p = x.prog[dir];
+      const item = { card: x.card, direcao: dir, progresso: p, novo: !p };
+      if (p && srs.estaVencido(p, agora)) vencidos.push(item);
+      if (!p) candidatosNovos.push(item);
+    }
+  }
+  if (soDificeis) {
+    vencidos = vencidos.filter((i) => i.progresso && i.progresso.dificil);
+    candidatosNovos = [];
+  }
+  vencidos.sort((a, b) => new Date(a.progresso.due) - new Date(b.progresso.due));
+  // novos: ordena por criação do card; 'rec' entra antes de 'prod' do mesmo card
+  candidatosNovos.sort((a, b) => {
+    const t = new Date(a.card.created_at) - new Date(b.card.created_at);
+    if (t !== 0) return t;
+    return a.direcao === b.direcao ? 0 : a.direcao === "rec" ? -1 : 1;
+  });
   const introduzidos = await contarNovosHoje();
   const permitido = Math.max(0, TETO_CARDS_NOVOS - introduzidos);
-  const novos = lista.filter((x) => !x.progresso).slice(0, permitido);
-  return [...vencidos, ...novos].map((x) => ({ card: x.card, progresso: x.progresso, novo: !x.progresso }));
+  return [...vencidos, ...candidatosNovos.slice(0, permitido)];
 }
 
 export async function gravarAvaliacao(item, nota) {
   const agora = new Date();
   const atual = item.progresso || srs.progressoNovo(agora);
   const novo = srs.avaliar(atual, nota, agora);
-  const linha = { user_id: UID, card_id: item.card.id, ...novo, updated_at: agora.toISOString() };
+  const linha = {
+    user_id: UID,
+    card_id: item.card.id,
+    direcao: item.direcao || "rec",
+    ...novo,
+    updated_at: agora.toISOString(),
+  };
   if (!item.progresso) linha.created_at = agora.toISOString();
-  const { error } = await supabase.from("card_progress").upsert(linha, { onConflict: "user_id,card_id" });
+  const { error } = await supabase
+    .from("card_progress")
+    .upsert(linha, { onConflict: "user_id,card_id,direcao" });
   if (error) {
     console.warn("Erro ao gravar progresso:", error);
     return;
@@ -201,6 +251,7 @@ export async function iniciarSessao(idioma, modo, extra = {}) {
       modo,
       idioma,
       modoResposta,
+      soDificeis,
       fila: [],
       indice: 0,
       revelado: false,
@@ -218,7 +269,6 @@ export async function iniciarSessao(idioma, modo, extra = {}) {
   atualizar({ sessao });
 }
 
-// Prepara o card atual (gera opções da múltipla escolha, zera respostas).
 function prepararCard(sessao) {
   sessao.revelado = false;
   sessao.previsao = null;
@@ -227,7 +277,9 @@ function prepararCard(sessao) {
   sessao.acertou = null;
   sessao.opcoes = [];
   const item = sessao.fila[sessao.indice];
-  if (item && item.card.type !== "cloze" && sessao.modoResposta === "multipla") sessao.opcoes = gerarOpcoes(item, sessao.fila);
+  if (item && item.card.type !== "cloze" && sessao.modoResposta === "multipla") {
+    sessao.opcoes = gerarOpcoes(item, sessao.fila);
+  }
 }
 
 function revelar(acertou = null) {
@@ -243,7 +295,7 @@ function verificarDigitado() {
   const s = state.sessao;
   const item = s.fila[s.indice];
   const digitado = inp.value;
-  const acertou = conferir(item.card, digitado);
+  const acertou = conferir(item.card, digitado, item.direcao);
   const previsao = s.modo === "revisao" ? srs.previsao(item.progresso || srs.progressoNovo(), new Date()) : null;
   atualizar({ sessao: { ...s, digitado, acertou, revelado: true, previsao } });
 }
@@ -251,17 +303,17 @@ function verificarDigitado() {
 function escolher(opcao) {
   const s = state.sessao;
   const item = s.fila[s.indice];
-  const acertou = normalizar(opcao) === normalizar(respostaAlvo(item.card));
+  const acertou = normalizar(opcao) === normalizar(respostaAlvo(item.card, item.direcao));
   const previsao = s.modo === "revisao" ? srs.previsao(item.progresso || srs.progressoNovo(), new Date()) : null;
   atualizar({ sessao: { ...s, escolhida: opcao, acertou, revelado: true, previsao } });
 }
 
-function avaliar(chave) {
+async function avaliar(chave) {
   const s = state.sessao;
   const item = s.fila[s.indice];
   const ultimo = s.indice + 1 >= s.fila.length;
   const gravacao = gravarAvaliacao(item, srs.NOTAS[chave]);
-  if (ultimo && s.modo === "revisao") return gravacao.then(avancar);
+  if (ultimo && s.modo === "revisao") await gravacao;
   avancar();
 }
 
@@ -282,12 +334,21 @@ async function toggleDificil() {
       .from("card_progress")
       .update({ dificil: novoValor })
       .eq("user_id", UID)
-      .eq("card_id", item.card.id);
+      .eq("card_id", item.card.id)
+      .eq("direcao", item.direcao || "rec");
     if (error) return console.warn(error);
     item.progresso.dificil = novoValor;
   } else {
     const agora = new Date();
-    const linha = { user_id: UID, card_id: item.card.id, ...srs.progressoNovo(agora), dificil: novoValor, created_at: agora.toISOString(), updated_at: agora.toISOString() };
+    const linha = {
+      user_id: UID,
+      card_id: item.card.id,
+      direcao: item.direcao || "rec",
+      ...srs.progressoNovo(agora),
+      dificil: novoValor,
+      created_at: agora.toISOString(),
+      updated_at: agora.toISOString(),
+    };
     const { data, error } = await supabase.from("card_progress").insert(linha).select().single();
     if (error) return console.warn(error);
     item.progresso = data;
@@ -307,7 +368,7 @@ export function renderEstudo(raiz) {
   const s = state.sessao;
   const barra = el("header", { classe: "barra-topo barra-topo--sessao" }, [
     el("button", { classe: "btn-voltar", "aria-label": "Voltar", onclick: sairSessao }, [icone("arrow-left")]),
-    el("span", { classe: "barra-topo__titulo", texto: tituloSessao(s) }),
+    el("span", { classe: "barra-topo__titulo", texto: s.modo === "revisao" ? "Revisão" : "Prática livre" }),
     el("span", {
       classe: "sessao-progresso",
       texto: !s.carregando && s.fila.length ? `${Math.min(s.indice + 1, s.fila.length)}/${s.fila.length}` : "",
@@ -334,30 +395,57 @@ export function renderEstudo(raiz) {
   raiz.replaceChildren(barra, conteudo);
 }
 
-function tituloSessao(s) {
-  if (s.modo === "pratica") return "Prática livre";
-  return "Revisão";
+// Modo efetivo do card atual: cloze e casos degenerados caem para "ver".
+function modoDoCard(s) {
+  const item = s.fila[s.indice];
+  if (!item || item.card.type === "cloze") return "ver";
+  if (s.modoResposta === "ouvir" && item.direcao === "prod") return "ver"; // ouvir só faz sentido no reconhecimento
+  if (s.modoResposta === "multipla" && (s.opcoes || []).length < 2) return "ver";
+  return s.modoResposta;
 }
 
 function cartaoCard(item, s) {
   const card = item.card;
+  const modo = modoDoCard(s);
+  const prod = item.direcao === "prod";
   const c = el("section", { classe: "flashcard" });
   c.append(el("span", { classe: "flashcard__idioma", texto: nomeIdioma(card.language) }));
+  if (prod) {
+    c.append(el("span", { classe: "flashcard__direcao" }, [icone("pencil"), " produção"]));
+  }
 
-  const frenteTexto = card.type === "cloze" ? frenteCloze(card.cloze_text || "") : card.front || "";
+  // Frente/verso conforme a direção:
+  // rec : frente = L2 (card.front) → resposta = PT (card.back)
+  // prod: frente = PT (card.back)  → resposta = L2 (card.front)
+  const frenteTexto = card.type === "cloze" ? frenteCloze(card.cloze_text || "") : prod ? card.back || "" : card.front || "";
+  const respostaTexto = prod ? card.front || "" : card.back || "";
 
   if (!s.revelado) {
-    c.append(el("div", { classe: "flashcard__frente", texto: frenteTexto }));
+    if (modo === "ouvir") {
+      c.append(
+        el("button", { classe: "btn-audio btn-audio--grande", "aria-label": "Ouvir", onclick: () => tocarCard(card) }, [icone("volume")])
+      );
+      c.append(el("div", { classe: "texto-suave", texto: "toque para ouvir e tente lembrar" }));
+    } else {
+      c.append(el("div", { classe: "flashcard__frente", texto: frenteTexto }));
+    }
   } else if (card.type === "cloze") {
     c.append(el("div", { classe: "flashcard__resposta" }, nosClozeRevelado(card.cloze_text || "")));
     if (card.back) c.append(el("div", { classe: "flashcard__traducao texto-suave", texto: card.back }));
   } else {
     c.append(el("div", { classe: "flashcard__frente-peq texto-suave", texto: frenteTexto }));
     c.append(el("div", { classe: "divisor" }));
-    c.append(el("div", { classe: "flashcard__resposta", texto: card.back || "" }));
+    c.append(el("div", { classe: "flashcard__resposta", texto: respostaTexto }));
+    if (card.example) {
+      c.append(
+        el("div", { classe: "flashcard__exemplo" }, [
+          el("span", { classe: "flashcard__exemplo-texto", texto: card.example }),
+          el("button", { classe: "btn-audio-mini", "aria-label": "Ouvir frase", onclick: () => falar(card.example, card.tts_lang || card.language) }, [icone("volume-2")]),
+        ])
+      );
+    }
   }
 
-  // Feedback de acerto (digitar / múltipla escolha)
   if (s.revelado && s.acertou !== null) {
     if (s.acertou) {
       c.append(el("div", { classe: "feedback feedback--ok" }, [icone("check"), "Você acertou!"]));
@@ -366,6 +454,9 @@ function cartaoCard(item, s) {
       c.append(el("div", { classe: "feedback feedback--erro" }, [icone("x"), `Sua resposta: ${sua || "(vazia)"}`]));
     }
   }
+
+  // No modo Ouvir (antes de revelar), o botão grande já é o áudio — sem duplicar.
+  if (!s.revelado && modo === "ouvir") return c;
 
   const acoesCard = el("div", { classe: "flashcard__acoes" }, [
     el("button", { classe: "btn-audio", "aria-label": "Ouvir pronúncia", onclick: () => tocarCard(card) }, [icone("volume")]),
@@ -382,21 +473,15 @@ function cartaoCard(item, s) {
   return c;
 }
 
-// Modo efetivo do card atual: cloze e múltipla-sem-opções-suficientes caem para "ver".
-function modoDoCard(s) {
-  const item = s.fila[s.indice];
-  if (!item || item.card.type === "cloze") return "ver";
-  if (s.modoResposta === "multipla" && (s.opcoes || []).length < 2) return "ver";
-  return s.modoResposta;
-}
-
 function areaAcao(s) {
   const wrap = el("div", { classe: "area-acao" });
+  const item = s.fila[s.indice];
   const modo = modoDoCard(s);
 
   if (!s.revelado) {
     if (modo === "digitar") {
-      const inp = el("input", { classe: "campo resp-digitar", id: "resp-digitar", type: "text", placeholder: "Escreva a resposta…", autocomplete: "off", autocapitalize: "off", spellcheck: "false" });
+      const placeholder = item.direcao === "prod" ? `Escreva em ${nomeIdioma(item.card.language).toLowerCase()}…` : "Escreva a tradução…";
+      const inp = el("input", { classe: "campo resp-digitar", id: "resp-digitar", type: "text", placeholder, autocomplete: "off", autocapitalize: "off", spellcheck: "false" });
       inp.addEventListener("keydown", (ev) => {
         if (ev.key === "Enter") verificarDigitado();
       });
@@ -462,16 +547,19 @@ function telaConclusao() {
 
 /* ---------------- Modos de resposta (ajudantes) ---------------- */
 
-// Resposta "alvo" de um card: verso (básico) ou palavra da lacuna (cloze).
-export function respostaAlvo(card) {
+/* Resposta "alvo" conforme a direção:
+   rec  → o português (back) ou o conteúdo da lacuna (cloze);
+   prod → a palavra no idioma (front). */
+export function respostaAlvo(card, direcao = "rec") {
   if (card.type === "cloze") {
     const achados = (card.cloze_text || "").match(/\[([^\]]*)\]/g);
     if (achados && achados.length) return achados.map((s) => s.slice(1, -1)).join(" ");
+    return "";
   }
-  return card.back || "";
+  return (direcao === "prod" ? card.front : card.back) || "";
 }
 
-// Normaliza para comparar: minúsculas, sem acentos, sem pontuação, sem artigos.
+// Normaliza para comparar: minúsculas, sem acentos, sem pontuação.
 export function normalizar(t) {
   return (t || "")
     .toLowerCase()
@@ -484,42 +572,44 @@ export function normalizar(t) {
 }
 
 // Artigos que podem ser OMITIDOS (mas não trocados) na resposta digitada.
-const RE_ARTIGO = /^(o|a|os|as|um|uma|el|la|los|las|le|les|der|die|das|lo)\s+/;
+const RE_ARTIGO = /^(o|a|os|as|um|uma|el|la|los|las|le|les|der|die|das|lo|the|un|une|il|i|gli|un')\s+/;
 function semArtigo(s) {
   return s.replace(RE_ARTIGO, "");
 }
 
-/* Confere a resposta digitada. Aceita sinônimos (separados por / ou ;) e
-   tolera o artigo AUSENTE ("casa" = "a casa"), mas NÃO o artigo TROCADO
-   ("o casa" ≠ "a casa") — importante num app de idiomas. */
-export function conferir(card, texto) {
+/* Confere a resposta digitada (sinônimos por / ou ;). Tolera artigo
+   AUSENTE ("casa" = "a casa"), mas rejeita artigo TROCADO. */
+export function conferir(card, texto, direcao = "rec") {
   const d = normalizar(texto);
   if (!d) return false;
   const dSem = semArtigo(d);
   const dTemArtigo = RE_ARTIGO.test(d);
-  const alternativas = respostaAlvo(card).split(/[/;]/).map(normalizar).filter(Boolean);
+  const alternativas = respostaAlvo(card, direcao).split(/[/;]/).map(normalizar).filter(Boolean);
   for (const alvo of alternativas) {
-    if (d === alvo) return true; // igual, incluindo o artigo
-    if (dSem === semArtigo(alvo) && (!dTemArtigo || !RE_ARTIGO.test(alvo))) return true; // artigo só omitido
+    if (d === alvo) return true;
+    if (dSem === semArtigo(alvo) && (!dTemArtigo || !RE_ARTIGO.test(alvo))) return true;
   }
   return false;
 }
 
-// Gera as 4 opções (correta + até 3 distratores de outros cards).
+/* Opções da múltipla escolha: correta + até 3 distratores, preferindo
+   cards do MESMO idioma (importante em sessões multi-idioma). */
 function gerarOpcoes(item, fila) {
-  const correta = respostaAlvo(item.card);
-  const chaveCorreta = normalizar(correta);
-  const pool = [];
-  const vistos = new Set([chaveCorreta]);
+  const correta = respostaAlvo(item.card, item.direcao);
+  const vistos = new Set([normalizar(correta)]);
+  const mesmoIdioma = [];
+  const outros = [];
   for (const x of fila) {
-    const r = respostaAlvo(x.card);
+    if (x.card.id === item.card.id) continue;
+    const r = respostaAlvo(x.card, item.direcao);
     const k = normalizar(r);
     if (!k || vistos.has(k)) continue;
     vistos.add(k);
-    pool.push(r);
+    (x.card.language === item.card.language ? mesmoIdioma : outros).push(r);
   }
-  embaralhar(pool);
-  const opcoes = [correta, ...pool.slice(0, 3)];
+  embaralhar(mesmoIdioma);
+  embaralhar(outros);
+  const opcoes = [correta, ...[...mesmoIdioma, ...outros].slice(0, 3)];
   embaralhar(opcoes);
   return opcoes;
 }

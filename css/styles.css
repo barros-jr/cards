@@ -220,6 +220,29 @@ body {
 .divisor { width: 64%; height: 1px; background: var(--cor-borda); }
 .cloze-resp { color: var(--acento); font-weight: 600; }
 
+/* Direção (produção) e frase de exemplo */
+.flashcard__direcao {
+  position: absolute; top: 14px; right: 16px;
+  display: inline-flex; align-items: center; gap: 4px;
+  font-size: 0.72rem; font-weight: 600;
+  color: var(--accent); background: var(--accent-suave);
+  border-radius: 999px; padding: 4px 10px;
+}
+.flashcard__exemplo {
+  display: flex; align-items: center; gap: 8px;
+  max-width: 92%; margin-top: 2px;
+}
+.flashcard__exemplo-texto { font-style: italic; font-size: 0.95rem; color: var(--cor-texto-suave); }
+.btn-audio-mini {
+  width: 34px; height: 34px; flex: none; border-radius: 50%;
+  border: 1px solid var(--cor-borda); background: var(--cor-superficie-2);
+  color: var(--acento); cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+}
+.btn-audio-mini .ti { font-size: 1rem; }
+.btn-audio--grande { width: 84px; height: 84px; }
+.btn-audio--grande .ti { font-size: 2.2rem; }
+
 .flashcard__acoes { display: flex; gap: 12px; align-items: center; margin-top: 6px; }
 .btn-audio { width: 52px; height: 52px; border-radius: 50%; border: 1px solid var(--cor-borda); background: var(--cor-superficie-2); color: var(--acento); cursor: pointer; display: flex; align-items: center; justify-content: center; }
 .btn-audio .ti { font-size: 1.4rem; }
