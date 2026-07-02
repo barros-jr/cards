@@ -1,0 +1,14 @@
+# macOS
+.DS_Store
+
+# Vercel
+.vercel
+
+# Node (caso um dia use npx/ferramentas locais)
+node_modules/
+
+# Logs
+*.log
+
+# Configurações locais do Claude Code
+.claude/settings.local.json
