@@ -11,7 +11,8 @@ export const state = {
   rota: "home", // 'home' | 'estudo'
   carregando: true,
   idiomas: [], // idiomas disponíveis (ex.: ['es'])
-  idioma: "todos", // filtro atual ('todos' ou um idioma)
+  idiomasSelecionados: null, // array de códigos incluídos no estudo (null até carregar)
+  detalheIdiomas: [], // [{ idioma, total, dominados, due }] — para a lista da Home
   modo: "revisao", // 'revisao' | 'pratica'
   pendentes: { due: 0, novos: 0, total: 0 }, // contagem do modo Revisão
   totalIdioma: 0, // nº de cards do idioma (modo Prática livre)
@@ -45,6 +46,13 @@ export function atualizar(delta = {}) {
 /* Ícone de linha (Tabler). Uso: icone("flame"). */
 export function icone(nome) {
   return el("i", { classe: `ti ti-${nome}`, "aria-hidden": "true" });
+}
+
+/* Cor de sinalização de um idioma (variável CSS; ver :root em styles.css).
+   Cores moderadas por idioma (não bandeiras) ajudam a diferenciar sessões
+   multi-idioma. Cai num tom neutro se o código não tiver cor definida. */
+export function corIdioma(cod) {
+  return `var(--lang-${cod}, var(--lang-outros))`;
 }
 
 /* Cria elementos via DOM (nunca "colando" texto cru com innerHTML).

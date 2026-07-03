@@ -15,7 +15,7 @@ import { supabase } from "./supabase.js";
 import { USUARIO_ID, TETO_CARDS_NOVOS } from "./config.js";
 import * as srs from "./srs.js";
 import { tocarCard, falar } from "./audio.js";
-import { state, atualizar, el, icone } from "./state.js";
+import { state, atualizar, el, icone, corIdioma } from "./state.js";
 
 const UID = USUARIO_ID;
 
@@ -35,11 +35,19 @@ export async function carregarIdiomas() {
   return [...new Set((data || []).map((r) => r.language).filter(Boolean))].sort();
 }
 
-/* Busca cards (por idioma) + progresso do usuário nas DUAS direções.
+/* Seleção efetiva de idiomas: null = todos (nenhuma restrição). */
+export function selecaoEfetiva() {
+  const sel = state.idiomasSelecionados;
+  if (!sel || !sel.length) return null;
+  return sel;
+}
+
+/* Busca cards (dos idiomas selecionados) + progresso nas DUAS direções.
+   selecao = array de códigos ou null (todos).
    Devolve [{ card, prog: { rec: linha|null, prod: linha|null } }]. */
-async function buscarCardsComProgresso(idioma) {
+async function buscarCardsComProgresso(selecao) {
   let consulta = supabase.from("cards").select("*");
-  if (idioma && idioma !== "todos") consulta = consulta.eq("language", idioma);
+  if (Array.isArray(selecao) && selecao.length) consulta = consulta.in("language", selecao);
   const { data: cards, error } = await consulta;
   if (error) {
     console.warn("Erro ao buscar cards:", error);
@@ -79,24 +87,51 @@ async function contarNovosHoje() {
   return count || 0;
 }
 
-/* Contagens da Home. Cada card+direção conta como uma entrada. */
+/* Contagens da Home: monta o detalhe POR idioma (para as linhas
+   selecionáveis) e os totais da seleção atual. Cada card+direção
+   conta como uma entrada. */
 export async function carregarContagens() {
-  const lista = await buscarCardsComProgresso(state.idioma);
+  const lista = await buscarCardsComProgresso(null); // todos os idiomas
   const agora = new Date();
-  let due = 0, novosDisponiveis = 0;
+
+  const mapa = new Map(); // cod -> { idioma, total, dominados, due, novos }
   for (const x of lista) {
+    const cod = x.card.language;
+    if (!mapa.has(cod)) mapa.set(cod, { idioma: cod, total: 0, dominados: 0, due: 0, novos: 0 });
+    const m = mapa.get(cod);
+    m.total++;
+    if (x.prog.rec && x.prog.rec.state === 2) m.dominados++;
     for (const dir of direcoesDe(x.card)) {
       const p = x.prog[dir];
-      if (p && srs.estaVencido(p, agora)) due++;
-      if (!p) novosDisponiveis++;
+      if (p && srs.estaVencido(p, agora)) m.due++;
+      if (!p) m.novos++;
     }
+  }
+  const detalheIdiomas = [...mapa.values()].sort((a, b) => a.idioma.localeCompare(b.idioma));
+  const idiomas = detalheIdiomas.map((d) => d.idioma);
+
+  // Seleção: primeira carga = todos; depois, só códigos que ainda existem.
+  let sel = state.idiomasSelecionados;
+  if (!sel) sel = idiomas.slice();
+  else sel = sel.filter((c) => idiomas.includes(c));
+
+  const efetiva = new Set(sel.length ? sel : idiomas);
+  let due = 0, novosDisponiveis = 0, totalSel = 0;
+  for (const d of detalheIdiomas) {
+    if (!efetiva.has(d.idioma)) continue;
+    due += d.due;
+    novosDisponiveis += d.novos;
+    totalSel += d.total;
   }
   const introduzidos = await contarNovosHoje();
   const novos = Math.min(novosDisponiveis, Math.max(0, TETO_CARDS_NOVOS - introduzidos));
   const { streak, estudouHoje } = await resumoFoguinho();
   atualizar({
+    idiomas,
+    detalheIdiomas,
+    idiomasSelecionados: sel,
     pendentes: { due, novos, total: due + novos },
-    totalIdioma: lista.length,
+    totalIdioma: totalSel,
     streak,
     estudouHoje,
   });
@@ -135,16 +170,19 @@ export async function carregarPainel() {
   const { data: cards } = await supabase.from("cards").select("*").limit(1000);
   let palavraDia = null;
   if (cards && cards.length) {
+    const sel = selecaoEfetiva();
+    const pool = sel ? cards.filter((c) => sel.includes(c.language)) : cards;
+    const lista2 = pool.length ? pool : cards;
     const dia = Math.floor((hoje - new Date(hoje.getFullYear(), 0, 0)) / 86400000);
-    palavraDia = cards[dia % cards.length];
+    palavraDia = lista2[dia % lista2.length];
   }
 
   atualizar({ semana, stats: { total: total || 0, dominados: dominados || 0 }, palavraDia });
 }
 
 /* Fila: itens = { card, direcao, progresso, novo }. */
-async function montarFila(idioma, modo, { soDificeis = false } = {}) {
-  const lista = await buscarCardsComProgresso(idioma);
+async function montarFila(selecao, modo, { soDificeis = false } = {}) {
+  const lista = await buscarCardsComProgresso(selecao);
 
   if (modo === "pratica") {
     // Prática livre: só reconhecimento (navegação leve), embaralhado.
@@ -242,14 +280,15 @@ async function resumoFoguinho() {
 
 /* ---------------- Sessão (controle) ---------------- */
 
-export async function iniciarSessao(idioma, modo, extra = {}) {
+export async function iniciarSessao(selecao, modo, extra = {}) {
+  if (selecao == null) selecao = selecaoEfetiva();
   const modoResposta = extra.modoResposta || state.modoResposta || "ver";
   const soDificeis = extra.soDificeis ?? state.soDificeis;
   atualizar({
     rota: "estudo",
     sessao: {
       modo,
-      idioma,
+      selecao,
       modoResposta,
       soDificeis,
       fila: [],
@@ -263,7 +302,7 @@ export async function iniciarSessao(idioma, modo, extra = {}) {
       carregando: true,
     },
   });
-  const fila = await montarFila(idioma, modo, { soDificeis });
+  const fila = await montarFila(selecao, modo, { soDificeis });
   const sessao = { ...state.sessao, fila, carregando: false };
   prepararCard(sessao);
   atualizar({ sessao });
@@ -409,7 +448,12 @@ function cartaoCard(item, s) {
   const modo = modoDoCard(s);
   const prod = item.direcao === "prod";
   const c = el("section", { classe: "flashcard" });
-  c.append(el("span", { classe: "flashcard__idioma", texto: nomeIdioma(card.language) }));
+  c.append(
+    el("span", { classe: "flashcard__idioma" }, [
+      el("span", { classe: "flashcard__idioma-dot", style: `background:${corIdioma(card.language)}` }),
+      nomeIdioma(card.language),
+    ])
+  );
   if (prod) {
     c.append(el("span", { classe: "flashcard__direcao" }, [icone("pencil"), " produção"]));
   }

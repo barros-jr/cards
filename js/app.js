@@ -1,10 +1,11 @@
 /* =========================================================
    app.js — ponto de entrada do Fluência
+   Liga tudo, registra o service worker, roteia entre as telas
+   e desenha a Home (painel + controles de estudo multi-idioma).
    ========================================================= */
 
-import { state, atualizar, registrarRender, el, icone } from "./state.js";
+import { state, atualizar, registrarRender, el, icone, corIdioma } from "./state.js";
 import {
-  carregarIdiomas,
   carregarContagens,
   carregarPainel,
   iniciarSessao,
@@ -15,18 +16,23 @@ import { construirBiblioteca, irParaBiblioteca } from "./library.js";
 import { renderEditor } from "./cards.js";
 import { tocarCard } from "./audio.js";
 
-const VERSAO = "Fluência v1.0";
+const VERSAO = "Fluência v1.1";
 
 iniciar();
 
 async function iniciar() {
   registrarRender(render);
   registrarServiceWorker();
-  render();
 
-  const idiomas = await carregarIdiomas();
-  atualizar({ idiomas, carregando: false });
+  // Preferência trivial de interface: quais idiomas estão selecionados.
+  try {
+    const salvo = JSON.parse(localStorage.getItem("fluencia.idiomas") || "null");
+    if (Array.isArray(salvo)) state.idiomasSelecionados = salvo;
+  } catch {}
+
+  render(); // primeira pintura ("Carregando…")
   await carregarContagens();
+  atualizar({ carregando: false });
   await carregarPainel();
 }
 
@@ -72,6 +78,7 @@ function renderHome(raiz) {
 
   main.append(cartaoFoguinho());
   main.append(cartaoContagem());
+  main.append(blocoIdiomas());
   main.append(controlesEstudo());
 
   main.append(el("div", { classe: "secao-divisor" }));
@@ -96,16 +103,89 @@ function cartaoContagem() {
   ]);
 }
 
+/* ---------------- Idiomas (linhas selecionáveis) ---------------- */
+
+function blocoIdiomas() {
+  const det = state.detalheIdiomas || [];
+  if (!det.length) return el("div", {});
+
+  const wrap = el("div", { classe: "bloco" });
+  wrap.append(
+    el("div", { classe: "rotulo-linha" }, [
+      el("div", { classe: "rotulo", texto: "Idiomas · toque para escolher" }),
+      el("button", { classe: "link-sutil", onclick: selecionarTodos, texto: "Todos" }),
+    ])
+  );
+
+  const sel = state.idiomasSelecionados || [];
+  const efetiva = new Set(sel.length ? sel : state.idiomas);
+  for (const d of det) wrap.append(linhaIdioma(d, efetiva.has(d.idioma)));
+
+  // Aviso de interferência: espanhol + italiano são muito parecidos.
+  if (efetiva.has("es") && efetiva.has("it")) {
+    wrap.append(
+      el("div", { classe: "dica-interferencia" }, [
+        icone("bulb"),
+        el("span", {
+          texto:
+            "Espanhol e italiano são parecidos — misturá-los na mesma sessão pode confundir. Se puder, estude cada um em um momento do dia.",
+        }),
+      ])
+    );
+  }
+  return wrap;
+}
+
+function linhaIdioma(d, ativa) {
+  const hoje = d.due + d.novos;
+  const pct = d.total ? Math.round((d.dominados / d.total) * 100) : 0;
+  return el(
+    "button",
+    { classe: `linha-idioma ${ativa ? "" : "linha-idioma--apagada"}`, onclick: () => toggleIdioma(d.idioma) },
+    [
+      el("span", { classe: "linha-idioma__dot", style: `background:${corIdioma(d.idioma)}` }),
+      el("span", { classe: "linha-idioma__meio" }, [
+        el("div", { classe: "linha-idioma__nome" }, [
+          nomeIdioma(d.idioma),
+          el("span", { classe: "texto-suave", texto: `  ·  ${hoje} hoje` }),
+        ]),
+        el("div", { classe: "linha-idioma__barra" }, [
+          el("div", { classe: "linha-idioma__barra-cheio", style: `width:${pct}%;background:${corIdioma(d.idioma)}` }),
+        ]),
+      ]),
+      el("span", { classe: `linha-idioma__check ${ativa ? "ativo" : ""}` }, [icone(ativa ? "circle-check" : "circle")]),
+    ]
+  );
+}
+
+function toggleIdioma(cod) {
+  const base =
+    state.idiomasSelecionados && state.idiomasSelecionados.length
+      ? state.idiomasSelecionados.slice()
+      : state.idiomas.slice();
+  const sel = base.includes(cod) ? base.filter((c) => c !== cod) : [...base, cod];
+  try { localStorage.setItem("fluencia.idiomas", JSON.stringify(sel)); } catch {}
+  atualizar({ idiomasSelecionados: sel });
+  carregarContagens();
+  carregarPainel();
+}
+
+function selecionarTodos() {
+  const sel = state.idiomas.slice();
+  try { localStorage.setItem("fluencia.idiomas", JSON.stringify(sel)); } catch {}
+  atualizar({ idiomasSelecionados: sel });
+  carregarContagens();
+  carregarPainel();
+}
+
+/* ---------------- Controles de estudo ---------------- */
+
 function controlesEstudo() {
   const revisao = state.modo === "revisao";
   const numero = revisao ? state.pendentes.total : state.totalIdioma;
   const semNada = numero === 0 && !state.soDificeis;
 
-  const chips = el("div", { classe: "chips" }, [chip("Todos", "todos")]);
-  for (const idi of state.idiomas) chips.append(chip(nomeIdioma(idi), idi));
-
   const wrap = el("div", {});
-  wrap.append(el("div", { classe: "bloco" }, [el("div", { classe: "rotulo", texto: "Idioma" }), chips]));
   wrap.append(el("div", { classe: "segmentos" }, [segmento("Revisão", "revisao"), segmento("Prática livre", "pratica")]));
   wrap.append(
     el("div", { classe: "bloco" }, [
@@ -119,15 +199,10 @@ function controlesEstudo() {
       el("button", { classe: "btn btn-primario btn-estudar", onclick: aoEstudar }, [icone("player-play"), " Estudar"]),
       el("button", { classe: "btn btn-surpresa", onclick: aoSurpresa }, [icone("dice-5"), " Surpresa"]),
       semNada && revisao ? el("p", { classe: "texto-suave centro", texto: "Tudo em dia por aqui." }) : null,
-      semNada && !revisao ? el("p", { classe: "texto-suave centro", texto: "Nenhum card neste idioma ainda." }) : null,
+      semNada && !revisao ? el("p", { classe: "texto-suave centro", texto: "Nenhum card nesta seleção ainda." }) : null,
     ])
   );
   return wrap;
-}
-
-function chip(rotulo, valor) {
-  const ativo = state.idioma === valor;
-  return el("button", { classe: `chip ${ativo ? "chip--ativo" : ""}`, onclick: () => trocarIdioma(valor), texto: rotulo });
 }
 
 function segmento(rotulo, valor) {
@@ -145,12 +220,6 @@ function chipDificeis() {
   return el("button", { classe: `chip chip-toggle ${ativo ? "chip--ativo" : ""}`, onclick: () => atualizar({ soDificeis: !state.soDificeis }) }, [icone("star"), "Só difíceis"]);
 }
 
-async function trocarIdioma(valor) {
-  if (state.idioma === valor) return;
-  atualizar({ idioma: valor });
-  await carregarContagens();
-}
-
 function trocarModo(valor) {
   if (state.modo === valor) return;
   atualizar({ modo: valor });
@@ -159,11 +228,11 @@ function trocarModo(valor) {
 function aoEstudar() {
   const numero = state.modo === "revisao" ? state.pendentes.total : state.totalIdioma;
   if (numero === 0 && !state.soDificeis) return;
-  iniciarSessao(state.idioma, state.modo, { modoResposta: state.modoResposta, soDificeis: state.soDificeis });
+  iniciarSessao(null, state.modo, { modoResposta: state.modoResposta, soDificeis: state.soDificeis });
 }
 
 function aoSurpresa() {
-  iniciarSessao("todos", "pratica", { modoResposta: "multipla", soDificeis: false });
+  iniciarSessao(null, "pratica", { modoResposta: "multipla", soDificeis: false });
 }
 
 /* ---------------- Painel ---------------- */
