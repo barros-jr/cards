@@ -14,7 +14,7 @@
        CACHE_VERSION abaixo. Isso limpa o cache antigo. <<<
    ========================================================= */
 
-const CACHE_VERSION = "v12";
+const CACHE_VERSION = "v13";
 const CACHE = `fluencia-${CACHE_VERSION}`;
 
 // Arquivos do "esqueleto" que garantimos ter offline.
@@ -32,8 +32,10 @@ const ARQUIVOS_ESSENCIAIS = [
   "/js/config.js",
   "/js/supabase.js",
   "/manifest.json",
+  "/icons/icon-180.png",
   "/icons/icon-192.png",
   "/icons/icon-512.png",
+  "/icons/icon-512-maskable.png",
 ];
 
 // Instala: baixa o esqueleto e já assume o controle na próxima abertura.
