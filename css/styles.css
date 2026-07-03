@@ -196,6 +196,12 @@ body {
 }
 .dica-interferencia .ti { flex: none; font-size: 1.05rem; margin-top: 1px; }
 
+/* Marca (logo + nome) no topo da Home */
+.barra-topo--home { justify-content: space-between; padding: env(safe-area-inset-top) 16px 0; }
+.marca { display: flex; align-items: center; gap: 9px; }
+.marca__logo { display: flex; line-height: 0; }
+.barra-topo--home .foguinho { position: static; right: auto; }
+
 .segmentos { display: flex; gap: 4px; margin-top: 8px; background: var(--cor-superficie-2); border: 1px solid var(--cor-borda); border-radius: var(--raio-ctrl); padding: 4px; }
 .segmento { flex: 1; padding: 10px 8px; border: none; background: transparent; color: var(--cor-texto-suave); font-family: var(--font-sans); font-size: 0.92rem; font-weight: 600; border-radius: 9px; cursor: pointer; transition: color 0.15s; }
 .segmento--ativo { background: var(--cor-superficie); color: var(--acento); box-shadow: 0 1px 3px rgba(40, 35, 28, 0.1); }

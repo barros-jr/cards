@@ -60,8 +60,8 @@ function render() {
 /* ---------------- Home ---------------- */
 
 function renderHome(raiz) {
-  const barra = el("header", { classe: "barra-topo" }, [
-    el("span", { classe: "barra-topo__titulo", texto: "Fluência" }),
+  const barra = el("header", { classe: "barra-topo barra-topo--home" }, [
+    el("div", { classe: "marca" }, [logoMarca(), el("span", { classe: "barra-topo__titulo", texto: "Fluência" })]),
     el("span", { classe: `foguinho ${state.estudouHoje ? "" : "foguinho--apagado"}`, title: "Dias seguidos" }, [
       icone("flame"),
       el("span", { texto: String(state.streak) }),
@@ -324,6 +324,20 @@ function secaoTitulo(nome, texto) {
     el("span", { classe: "secao-icone" }, [icone(nome)]),
     el("span", { texto }),
   ]);
+}
+
+/* Marca no topo da Home: só as bolhas do logo (o fundo verde do ícone
+   se funde com a barra). Conteúdo 100% do app — sem dados do usuário. */
+function logoMarca() {
+  const s = el("span", { classe: "marca__logo", "aria-hidden": "true" });
+  s.innerHTML =
+    '<svg viewBox="0 0 120 120" width="34" height="34">' +
+    '<path d="M30 24 h36 a13 13 0 0 1 13 13 v16 a13 13 0 0 1 -13 13 h-22 l-14 13 3 -13 h-3 a13 13 0 0 1 -13 -13 v-16 a13 13 0 0 1 13 -13 z" fill="#f4efe6"/>' +
+    '<text x="48" y="59" font-family="Fraunces, Georgia, serif" font-size="30" font-weight="600" fill="#1c5b46" text-anchor="middle">F</text>' +
+    '<path d="M62 60 h32 a12 12 0 0 1 12 12 v12 a12 12 0 0 1 -12 12 h-3 l3 12 -13 -12 h-19 a12 12 0 0 1 -12 -12 v-12 a12 12 0 0 1 12 -12 z" fill="#c2703d"/>' +
+    '<circle cx="70" cy="78" r="3.4" fill="#f4efe6"/><circle cx="79" cy="78" r="3.4" fill="#f4efe6"/><circle cx="88" cy="78" r="3.4" fill="#f4efe6"/>' +
+    "</svg>";
+  return s;
 }
 
 /* ---------------- Barrinha inferior ---------------- */
