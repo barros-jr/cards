@@ -173,20 +173,30 @@ body {
 .rotulo-linha .rotulo { margin-bottom: 0; }
 .link-sutil { background: none; border: none; color: var(--acento); font-family: var(--font-sans); font-size: 0.8rem; font-weight: 700; cursor: pointer; padding: 4px 0; }
 
-.linha-idioma {
-  display: flex; align-items: center; gap: 12px; width: 100%; text-align: left;
-  background: var(--cor-superficie); border: 1px solid var(--cor-borda); border-radius: 14px;
-  padding: 12px 14px; margin-top: 8px; cursor: pointer; -webkit-tap-highlight-color: transparent;
-  transition: opacity 0.15s;
+/* Filtro de bandeiras redondas (Home · revisão) */
+.filtro-idiomas { display: flex; flex-wrap: wrap; gap: 16px; padding: 4px 2px 2px; }
+.chip-idioma {
+  position: relative; background: none; border: none; padding: 3px; cursor: pointer;
+  -webkit-tap-highlight-color: transparent; transition: opacity 0.15s, transform 0.1s;
 }
-.linha-idioma--apagada { opacity: 0.5; }
-.linha-idioma__dot { width: 11px; height: 11px; border-radius: 50%; flex: none; }
-.linha-idioma__meio { flex: 1; min-width: 0; }
-.linha-idioma__nome { font-weight: 600; font-size: 0.96rem; }
-.linha-idioma__barra { height: 5px; border-radius: 3px; background: var(--cor-borda); margin-top: 7px; overflow: hidden; }
-.linha-idioma__barra-cheio { height: 100%; border-radius: 3px; transition: width 0.3s; }
-.linha-idioma__check { flex: none; font-size: 1.3rem; color: var(--cor-texto-suave); opacity: 0.45; display: flex; }
-.linha-idioma__check.ativo { color: var(--acento); opacity: 1; }
+.chip-idioma:active { transform: scale(0.92); }
+.chip-idioma__disco {
+  width: 48px; height: 48px; border-radius: 50%; border: 2px solid var(--cor-borda);
+  background: var(--cor-superficie); display: flex; align-items: center; justify-content: center;
+  transition: border-color 0.15s;
+}
+.chip-idioma__bandeira { font-size: 1.55rem; line-height: 1; }
+.chip-idioma--off { opacity: 0.45; }
+.chip-idioma--off .chip-idioma__bandeira { filter: grayscale(1); }
+.chip-idioma__badge {
+  position: absolute; top: -2px; right: -2px; min-width: 20px; height: 20px; padding: 0 5px;
+  border-radius: 10px; background: var(--acento); color: #fff; font-size: 0.72rem; font-weight: 600;
+  display: flex; align-items: center; justify-content: center; line-height: 1;
+  border: 2px solid var(--cor-fundo);
+}
+.chip-idioma__badge--ok { background: var(--cor-borda); color: var(--cor-texto-suave); min-width: 20px; padding: 0; }
+.chip-idioma__badge--ok .ti { font-size: 0.8rem; }
+.chip-idioma--off .chip-idioma__badge { background: var(--cor-texto-suave); }
 
 .dica-interferencia {
   display: flex; align-items: flex-start; gap: 7px;
@@ -207,12 +217,8 @@ body {
    ========================================================= */
 
 /* Bandeiras (emoji) */
-.linha-idioma__bandeira { font-size: 1.45rem; line-height: 1; flex: none; }
 .item-lista__bandeira { font-size: 1.45rem; line-height: 1; flex: none; margin-right: 2px; }
 .flashcard__bandeira { font-size: 1rem; line-height: 1; }
-
-/* "em dia" na linha do idioma */
-.linha-idioma__emdia { color: var(--acento); font-weight: 600; font-size: 0.9rem; }
 
 /* Cartão "tudo em dia" */
 .contagem--emdia { padding: 26px 20px; }

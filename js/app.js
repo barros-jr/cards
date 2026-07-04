@@ -125,17 +125,20 @@ function blocoIdiomas() {
   }
 
   const wrap = el("div", { classe: "bloco" });
+  const varios = det.length > 1;
   wrap.append(
     el("div", { classe: "rotulo-linha" }, [
-      el("div", { classe: "rotulo", texto: det.length > 1 ? "Seus idiomas · toque para escolher" : "Seu idioma" }),
-      det.length > 1 ? el("button", { classe: "link-sutil", onclick: selecionarTodos, texto: "Todos" }) : null,
+      el("div", { classe: "rotulo", texto: varios ? "Seus idiomas · toque para filtrar" : "Seu idioma" }),
+      varios ? el("button", { classe: "link-sutil", onclick: selecionarTodos, texto: "Todos" }) : null,
     ])
   );
 
   const sel = state.idiomasSelecionados || [];
   const iniciadosCods = det.map((d) => d.idioma);
   const efetiva = new Set((sel.length ? sel : iniciadosCods).filter((c) => iniciadosCods.includes(c)));
-  for (const d of det) wrap.append(linhaIdioma(d, efetiva.has(d.idioma)));
+  const filtro = el("div", { classe: "filtro-idiomas" });
+  for (const d of det) filtro.append(chipIdioma(d, efetiva.has(d.idioma), varios));
+  wrap.append(filtro);
 
   // Aviso de interferência: espanhol + italiano são muito parecidos.
   if (efetiva.has("es") && efetiva.has("it")) {
@@ -160,24 +163,33 @@ function blocoIdiomas() {
   return wrap;
 }
 
-function linhaIdioma(d, ativa) {
-  const pct = d.total ? Math.round((d.dominados / d.total) * 100) : 0;
-  const situacao = d.due > 0
-    ? el("span", { classe: "texto-suave", texto: `  ·  ${d.due} ${d.due === 1 ? "revisão" : "revisões"}` })
-    : el("span", { classe: "linha-idioma__emdia", texto: "  ·  em dia ✓" });
+// Bandeira redonda com contador de revisões. Ativa = aro na cor do idioma;
+// inativa = cinza/apagada. Badge verde com o nº de revisões, ou ✓ se em dia.
+function chipIdioma(d, ativa, interativo) {
+  const cor = corIdioma(d.idioma);
+  const badge =
+    d.due > 0
+      ? el("span", { classe: "chip-idioma__badge", texto: d.due > 99 ? "99+" : String(d.due) })
+      : el("span", { classe: "chip-idioma__badge chip-idioma__badge--ok", "aria-hidden": "true" }, [icone("check")]);
+  const disco = el("span", { classe: "chip-idioma__disco", style: ativa ? `border-color:${cor}` : "" }, [
+    el("span", { classe: "chip-idioma__bandeira", texto: bandeiraIdioma(d.idioma) }),
+  ]);
+  const rotulo = `${nomeIdioma(d.idioma)} — ${d.due > 0 ? `${d.due} ${d.due === 1 ? "revisão" : "revisões"}` : "em dia"}`;
+
+  // Idioma único: nada a filtrar, vira só um indicador (não é botão).
+  if (!interativo) {
+    return el("span", { classe: "chip-idioma chip-idioma--ativo", title: rotulo, "aria-label": rotulo }, [disco, badge]);
+  }
   return el(
     "button",
-    { classe: `linha-idioma ${ativa ? "" : "linha-idioma--apagada"}`, onclick: () => toggleIdioma(d.idioma) },
-    [
-      el("span", { classe: "linha-idioma__bandeira", texto: bandeiraIdioma(d.idioma) }),
-      el("span", { classe: "linha-idioma__meio" }, [
-        el("div", { classe: "linha-idioma__nome" }, [nomeIdioma(d.idioma), situacao]),
-        el("div", { classe: "linha-idioma__barra" }, [
-          el("div", { classe: "linha-idioma__barra-cheio", style: `width:${pct}%;background:${corIdioma(d.idioma)}` }),
-        ]),
-      ]),
-      el("span", { classe: `linha-idioma__check ${ativa ? "ativo" : ""}` }, [icone(ativa ? "circle-check" : "circle")]),
-    ]
+    {
+      classe: `chip-idioma ${ativa ? "chip-idioma--ativo" : "chip-idioma--off"}`,
+      onclick: () => toggleIdioma(d.idioma),
+      "aria-pressed": ativa ? "true" : "false",
+      "aria-label": rotulo,
+      title: rotulo,
+    },
+    [disco, badge]
   );
 }
 
