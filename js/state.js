@@ -15,6 +15,7 @@ export const state = {
   detalheIdiomas: [], // [{ idioma, total, dominados, due }] — para a lista da Home
   modo: "revisao", // 'revisao' | 'pratica'
   pendentes: { due: 0, novos: 0, total: 0 }, // contagem do modo Revisão
+  tetoRestante: null, // quantas entradas novas ainda cabem hoje (teto diário)
   totalIdioma: 0, // nº de cards do idioma (modo Prática livre)
   streak: 0, // foguinho (dias seguidos)
   estudouHoje: false, // já estudou hoje? (foguinho aceso)
@@ -53,6 +54,14 @@ export function icone(nome) {
    multi-idioma. Cai num tom neutro se o código não tiver cor definida. */
 export function corIdioma(cod) {
   return `var(--lang-${cod}, var(--lang-outros))`;
+}
+
+/* Bandeira do idioma (emoji — zero peso, funciona em todo celular).
+   Complementa a cor: a bandeira identifica num relance, a cor pinta
+   barras e destaques. Inglês = 🇺🇸 (a voz do app é en-US). */
+export function bandeiraIdioma(cod) {
+  const bandeiras = { es: "🇪🇸", en: "🇺🇸", fr: "🇫🇷", it: "🇮🇹", de: "🇩🇪", pt: "🇧🇷" };
+  return bandeiras[cod] || "🏳️";
 }
 
 /* Cria elementos via DOM (nunca "colando" texto cru com innerHTML).

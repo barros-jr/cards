@@ -202,6 +202,42 @@ body {
 .marca__logo { display: flex; line-height: 0; }
 .barra-topo--home .foguinho { position: static; right: auto; }
 
+/* =========================================================
+   Reorganização das abas — Hoje só revisões + bandeiras
+   ========================================================= */
+
+/* Bandeiras (emoji) */
+.linha-idioma__bandeira { font-size: 1.45rem; line-height: 1; flex: none; }
+.item-lista__bandeira { font-size: 1.45rem; line-height: 1; flex: none; margin-right: 2px; }
+.flashcard__bandeira { font-size: 1rem; line-height: 1; }
+
+/* "em dia" na linha do idioma */
+.linha-idioma__emdia { color: var(--acento); font-weight: 600; font-size: 0.9rem; }
+
+/* Cartão "tudo em dia" */
+.contagem--emdia { padding: 26px 20px; }
+.contagem__check { display: flex; justify-content: center; margin-bottom: 6px; }
+.contagem__check .ti { font-size: 2.6rem; color: var(--acento); }
+.contagem--emdia .contagem__rot { font-weight: 700; font-size: 1.15rem; color: var(--cor-texto); }
+
+/* Botão "aprender palavras novas" (secundário, mas convidativo) */
+.btn-aprender { width: 100%; margin-top: 10px; background: var(--marca-suave); border-color: transparent; color: var(--acento); }
+
+/* Dica de idiomas não iniciados */
+.dica-naoiniciados { font-size: 0.82rem; margin-top: 10px; line-height: 1.45; }
+
+/* Página do idioma na Biblioteca */
+.acoes-idioma { display: flex; flex-direction: column; gap: 10px; margin-bottom: 6px; }
+.acoes-idioma .linha-botoes .btn { font-size: 0.95rem; }
+.rotulo-decks { margin: 14px 2px 8px; }
+
+/* Selo "Começar" (idioma ainda não iniciado) */
+.badge-comecar {
+  flex: none; font-size: 0.78rem; font-weight: 700;
+  color: var(--acento); background: var(--marca-suave);
+  border-radius: 999px; padding: 6px 12px;
+}
+
 .segmentos { display: flex; gap: 4px; margin-top: 8px; background: var(--cor-superficie-2); border: 1px solid var(--cor-borda); border-radius: var(--raio-ctrl); padding: 4px; }
 .segmento { flex: 1; padding: 10px 8px; border: none; background: transparent; color: var(--cor-texto-suave); font-family: var(--font-sans); font-size: 0.92rem; font-weight: 600; border-radius: 9px; cursor: pointer; transition: color 0.15s; }
 .segmento--ativo { background: var(--cor-superficie); color: var(--acento); box-shadow: 0 1px 3px rgba(40, 35, 28, 0.1); }

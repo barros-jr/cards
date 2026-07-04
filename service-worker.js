@@ -14,7 +14,7 @@
        CACHE_VERSION abaixo. Isso limpa o cache antigo. <<<
    ========================================================= */
 
-const CACHE_VERSION = "v14";
+const CACHE_VERSION = "v15";
 const CACHE = `fluencia-${CACHE_VERSION}`;
 
 // Arquivos do "esqueleto" que garantimos ter offline.

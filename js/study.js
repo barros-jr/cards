@@ -15,7 +15,7 @@ import { supabase } from "./supabase.js";
 import { USUARIO_ID, TETO_CARDS_NOVOS } from "./config.js";
 import * as srs from "./srs.js";
 import { tocarCard, falar } from "./audio.js";
-import { state, atualizar, el, icone, corIdioma } from "./state.js";
+import { state, atualizar, el, icone, corIdioma, bandeiraIdioma } from "./state.js";
 
 const UID = USUARIO_ID;
 
@@ -46,6 +46,7 @@ export function selecaoEfetiva() {
    selecao = array de códigos ou null (todos).
    Devolve [{ card, prog: { rec: linha|null, prod: linha|null } }]. */
 async function buscarCardsComProgresso(selecao) {
+  if (Array.isArray(selecao) && !selecao.length) return []; // seleção vazia = nada (não "todos"!)
   let consulta = supabase.from("cards").select("*");
   if (Array.isArray(selecao) && selecao.length) consulta = consulta.in("language", selecao);
   const { data: cards, error } = await consulta;
@@ -57,13 +58,18 @@ async function buscarCardsComProgresso(selecao) {
   const ids = lista.map((c) => c.id);
   let progressos = [];
   if (ids.length) {
-    const { data: prog, error: e2 } = await supabase
-      .from("card_progress")
-      .select("*")
-      .eq("user_id", UID)
-      .in("card_id", ids);
-    if (e2) console.warn("Erro ao buscar progresso:", e2);
-    progressos = prog || [];
+    // Em LOTES: o filtro .in() vai na URL, e centenas de UUIDs estouram o
+    // limite de tamanho da requisição conforme o acervo cresce.
+    const LOTE = 150;
+    const partes = [];
+    for (let i = 0; i < ids.length; i += LOTE) partes.push(ids.slice(i, i + LOTE));
+    const respostas = await Promise.all(
+      partes.map((p) => supabase.from("card_progress").select("*").eq("user_id", UID).in("card_id", p))
+    );
+    for (const r of respostas) {
+      if (r.error) console.warn("Erro ao buscar progresso:", r.error);
+      else progressos.push(...(r.data || []));
+    }
   }
   const mapa = new Map(progressos.map((p) => [`${p.card_id}|${p.direcao || "rec"}`, p]));
   return lista.map((c) => ({
@@ -94,12 +100,16 @@ export async function carregarContagens() {
   const lista = await buscarCardsComProgresso(null); // todos os idiomas
   const agora = new Date();
 
-  const mapa = new Map(); // cod -> { idioma, total, dominados, due, novos }
+  const mapa = new Map(); // cod -> { idioma, total, vistas, dominados, due, novos, iniciado }
   for (const x of lista) {
     const cod = x.card.language;
-    if (!mapa.has(cod)) mapa.set(cod, { idioma: cod, total: 0, dominados: 0, due: 0, novos: 0 });
+    if (!mapa.has(cod)) mapa.set(cod, { idioma: cod, total: 0, vistas: 0, dominados: 0, due: 0, novos: 0, iniciado: false });
     const m = mapa.get(cod);
     m.total++;
+    if (x.prog.rec || x.prog.prod) {
+      m.vistas++; // palavras já apresentadas ao usuário
+      m.iniciado = true;
+    }
     if (x.prog.rec && x.prog.rec.state === 2) m.dominados++;
     for (const dir of direcoesDe(x.card)) {
       const p = x.prog[dir];
@@ -109,13 +119,15 @@ export async function carregarContagens() {
   }
   const detalheIdiomas = [...mapa.values()].sort((a, b) => a.idioma.localeCompare(b.idioma));
   const idiomas = detalheIdiomas.map((d) => d.idioma);
+  const iniciados = detalheIdiomas.filter((d) => d.iniciado).map((d) => d.idioma);
 
   // Seleção: primeira carga = todos; depois, só códigos que ainda existem.
   let sel = state.idiomasSelecionados;
   if (!sel) sel = idiomas.slice();
   else sel = sel.filter((c) => idiomas.includes(c));
 
-  const efetiva = new Set(sel.length ? sel : idiomas);
+  // A Home só considera idiomas JÁ INICIADOS (idiomas novos começam pela Biblioteca).
+  const efetiva = new Set((sel.length ? sel : idiomas).filter((c) => iniciados.includes(c)));
   let due = 0, novosDisponiveis = 0, totalSel = 0;
   for (const d of detalheIdiomas) {
     if (!efetiva.has(d.idioma)) continue;
@@ -124,13 +136,15 @@ export async function carregarContagens() {
     totalSel += d.total;
   }
   const introduzidos = await contarNovosHoje();
-  const novos = Math.min(novosDisponiveis, Math.max(0, TETO_CARDS_NOVOS - introduzidos));
+  const tetoRestante = Math.max(0, TETO_CARDS_NOVOS - introduzidos);
+  const novos = Math.min(novosDisponiveis, tetoRestante);
   const { streak, estudouHoje } = await resumoFoguinho();
   atualizar({
     idiomas,
     detalheIdiomas,
     idiomasSelecionados: sel,
     pendentes: { due, novos, total: due + novos },
+    tetoRestante,
     totalIdioma: totalSel,
     streak,
     estudouHoje,
@@ -180,11 +194,15 @@ export async function carregarPainel() {
   atualizar({ semana, stats: { total: total || 0, dominados: dominados || 0 }, palavraDia });
 }
 
-/* Fila: itens = { card, direcao, progresso, novo }. */
-async function montarFila(selecao, modo, { soDificeis = false } = {}) {
+/* Fila: itens = { card, direcao, progresso, novo }.
+   Tipos de sessão:
+   - 'revisao': SÓ cards vencidos (a "dívida" do dia);
+   - 'novas'  : SÓ cards inéditos, na ordem didática, até o teto do dia;
+   - 'pratica': tudo, embaralhado, sem gravar nada. */
+async function montarFila(selecao, tipo, { soDificeis = false } = {}) {
   const lista = await buscarCardsComProgresso(selecao);
 
-  if (modo === "pratica") {
+  if (tipo === "pratica") {
     // Prática livre: só reconhecimento (navegação leve), embaralhado.
     let arr = lista.map((x) => ({ card: x.card, direcao: "rec", progresso: x.prog.rec, novo: !x.prog.rec }));
     if (soDificeis) arr = arr.filter((i) => i.progresso && i.progresso.dificil);
@@ -192,7 +210,6 @@ async function montarFila(selecao, modo, { soDificeis = false } = {}) {
     return arr;
   }
 
-  // Revisão: vencidos (por due) + novos até o teto (rec antes de prod por card).
   const agora = new Date();
   let vencidos = [];
   let candidatosNovos = [];
@@ -204,20 +221,23 @@ async function montarFila(selecao, modo, { soDificeis = false } = {}) {
       if (!p) candidatosNovos.push(item);
     }
   }
-  if (soDificeis) {
-    vencidos = vencidos.filter((i) => i.progresso && i.progresso.dificil);
-    candidatosNovos = [];
+
+  if (tipo === "novas") {
+    // Palavras novas: ordem didática (created_at); 'rec' antes de 'prod'.
+    candidatosNovos.sort((a, b) => {
+      const t = new Date(a.card.created_at) - new Date(b.card.created_at);
+      if (t !== 0) return t;
+      return a.direcao === b.direcao ? 0 : a.direcao === "rec" ? -1 : 1;
+    });
+    const introduzidos = await contarNovosHoje();
+    const permitido = Math.max(0, TETO_CARDS_NOVOS - introduzidos);
+    return candidatosNovos.slice(0, permitido);
   }
+
+  // Revisão: só os vencidos, do mais atrasado para o mais recente.
+  if (soDificeis) vencidos = vencidos.filter((i) => i.progresso && i.progresso.dificil);
   vencidos.sort((a, b) => new Date(a.progresso.due) - new Date(b.progresso.due));
-  // novos: ordena por criação do card; 'rec' entra antes de 'prod' do mesmo card
-  candidatosNovos.sort((a, b) => {
-    const t = new Date(a.card.created_at) - new Date(b.card.created_at);
-    if (t !== 0) return t;
-    return a.direcao === b.direcao ? 0 : a.direcao === "rec" ? -1 : 1;
-  });
-  const introduzidos = await contarNovosHoje();
-  const permitido = Math.max(0, TETO_CARDS_NOVOS - introduzidos);
-  return [...vencidos, ...candidatosNovos.slice(0, permitido)];
+  return vencidos;
 }
 
 export async function gravarAvaliacao(item, nota) {
@@ -282,13 +302,16 @@ async function resumoFoguinho() {
 
 export async function iniciarSessao(selecao, modo, extra = {}) {
   if (selecao == null) selecao = selecaoEfetiva();
-  const modoResposta = extra.modoResposta || state.modoResposta || "ver";
-  const soDificeis = extra.soDificeis ?? state.soDificeis;
+  // Palavras novas: primeira exposição — sempre "ver" (não dá para
+  // digitar ou adivinhar o que nunca se viu).
+  const modoResposta = modo === "novas" ? "ver" : extra.modoResposta || state.modoResposta || "ver";
+  const soDificeis = modo === "novas" ? false : extra.soDificeis ?? state.soDificeis;
   atualizar({
     rota: "estudo",
     sessao: {
       modo,
       selecao,
+      origem: extra.origem || "home",
       modoResposta,
       soDificeis,
       fila: [],
@@ -324,7 +347,7 @@ function prepararCard(sessao) {
 function revelar(acertou = null) {
   const s = state.sessao;
   const item = s.fila[s.indice];
-  const previsao = s.modo === "revisao" ? srs.previsao(item.progresso || srs.progressoNovo(), new Date()) : null;
+  const previsao = s.modo !== "pratica" ? srs.previsao(item.progresso || srs.progressoNovo(), new Date()) : null;
   atualizar({ sessao: { ...s, revelado: true, previsao, acertou } });
 }
 
@@ -335,7 +358,7 @@ function verificarDigitado() {
   const item = s.fila[s.indice];
   const digitado = inp.value;
   const acertou = conferir(item.card, digitado, item.direcao);
-  const previsao = s.modo === "revisao" ? srs.previsao(item.progresso || srs.progressoNovo(), new Date()) : null;
+  const previsao = s.modo !== "pratica" ? srs.previsao(item.progresso || srs.progressoNovo(), new Date()) : null;
   atualizar({ sessao: { ...s, digitado, acertou, revelado: true, previsao } });
 }
 
@@ -343,7 +366,7 @@ function escolher(opcao) {
   const s = state.sessao;
   const item = s.fila[s.indice];
   const acertou = normalizar(opcao) === normalizar(respostaAlvo(item.card, item.direcao));
-  const previsao = s.modo === "revisao" ? srs.previsao(item.progresso || srs.progressoNovo(), new Date()) : null;
+  const previsao = s.modo !== "pratica" ? srs.previsao(item.progresso || srs.progressoNovo(), new Date()) : null;
   atualizar({ sessao: { ...s, escolhida: opcao, acertou, revelado: true, previsao } });
 }
 
@@ -352,7 +375,7 @@ async function avaliar(chave) {
   const item = s.fila[s.indice];
   const ultimo = s.indice + 1 >= s.fila.length;
   const gravacao = gravarAvaliacao(item, srs.NOTAS[chave]);
-  if (ultimo && s.modo === "revisao") await gravacao;
+  if (ultimo && s.modo !== "pratica") await gravacao;
   avancar();
 }
 
@@ -361,7 +384,7 @@ function avancar() {
   const novo = { ...s, indice: s.indice + 1 };
   prepararCard(novo);
   atualizar({ sessao: novo });
-  if (novo.indice >= s.fila.length && s.modo === "revisao" && s.fila.length > 0) carregarContagens();
+  if (novo.indice >= s.fila.length && s.modo !== "pratica" && s.fila.length > 0) carregarContagens();
 }
 
 async function toggleDificil() {
@@ -396,7 +419,9 @@ async function toggleDificil() {
 }
 
 async function sairSessao() {
-  atualizar({ rota: "home", sessao: null });
+  // Volta para onde a sessão começou (Home ou Biblioteca).
+  const origem = state.sessao && state.sessao.origem === "biblioteca" ? "biblioteca" : "home";
+  atualizar({ rota: origem, sessao: null });
   await carregarContagens();
   await carregarPainel();
 }
@@ -407,7 +432,10 @@ export function renderEstudo(raiz) {
   const s = state.sessao;
   const barra = el("header", { classe: "barra-topo barra-topo--sessao" }, [
     el("button", { classe: "btn-voltar", "aria-label": "Voltar", onclick: sairSessao }, [icone("arrow-left")]),
-    el("span", { classe: "barra-topo__titulo", texto: s.modo === "revisao" ? "Revisão" : "Prática livre" }),
+    el("span", {
+      classe: "barra-topo__titulo",
+      texto: s.modo === "revisao" ? "Revisão" : s.modo === "novas" ? "Palavras novas" : "Prática livre",
+    }),
     el("span", {
       classe: "sessao-progresso",
       texto: !s.carregando && s.fila.length ? `${Math.min(s.indice + 1, s.fila.length)}/${s.fila.length}` : "",
@@ -449,8 +477,8 @@ function cartaoCard(item, s) {
   const prod = item.direcao === "prod";
   const c = el("section", { classe: "flashcard" });
   c.append(
-    el("span", { classe: "flashcard__idioma" }, [
-      el("span", { classe: "flashcard__idioma-dot", style: `background:${corIdioma(card.language)}` }),
+    el("span", { classe: "flashcard__idioma", style: `color:${corIdioma(card.language)}` }, [
+      el("span", { classe: "flashcard__bandeira", texto: bandeiraIdioma(card.language) }),
       nomeIdioma(card.language),
     ])
   );
@@ -576,14 +604,29 @@ function telaConclusao() {
     c.append(el("h2", { classe: "titulo-secao", texto: "Dia concluído!" }));
     c.append(el("p", { classe: "conclusao__streak", texto: `Sequência de ${state.streak} ${state.streak === 1 ? "dia" : "dias"}` }));
     c.append(el("p", { classe: "texto-suave", texto: `Você revisou ${s.fila.length} card(s).` }));
+  } else if (!vazio && s.modo === "novas") {
+    c.append(el("div", { classe: "conclusao__emoji" }, [icone("confetti")]));
+    c.append(el("h2", { classe: "titulo-secao", texto: "Palavras novas no bolso!" }));
+    c.append(el("p", { classe: "texto-suave", texto: `Você conheceu ${s.fila.length} card(s) novo(s). Eles voltam na Revisão na hora certa.` }));
   } else {
     c.append(el("div", { classe: "conclusao__emoji" }, [icone(vazio ? "confetti" : "circle-check")]));
     c.append(
       el("h2", {
         classe: "titulo-secao",
-        texto: vazio ? (s.soDificeis ? "Nenhum card difícil por aqui" : s.modo === "revisao" ? "Nada para revisar agora!" : "Nenhum card aqui ainda") : "Sessão concluída!",
+        texto: vazio
+          ? s.soDificeis
+            ? "Nenhum card difícil por aqui"
+            : s.modo === "revisao"
+            ? "Nada para revisar agora!"
+            : s.modo === "novas"
+            ? "Sem palavras novas por hoje"
+            : "Nenhum card aqui ainda"
+          : "Sessão concluída!",
       })
     );
+    if (vazio && s.modo === "novas") {
+      c.append(el("p", { classe: "texto-suave", texto: "Você já atingiu o teto de novas de hoje, ou aprendeu tudo por aqui. Amanhã tem mais!" }));
+    }
   }
   c.append(el("button", { classe: "btn btn-primario", onclick: sairSessao, texto: "Voltar para o início" }));
   return c;

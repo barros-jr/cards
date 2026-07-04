@@ -6,8 +6,8 @@
    ========================================================= */
 
 import { supabase } from "./supabase.js";
-import { state, atualizar, el, icone } from "./state.js";
-import { nomeIdioma } from "./study.js";
+import { state, atualizar, el, icone, bandeiraIdioma } from "./state.js";
+import { nomeIdioma, iniciarSessao, carregarContagens } from "./study.js";
 import { abrirEditor } from "./cards.js";
 
 function bibPadrao() {
@@ -17,12 +17,14 @@ function bibPadrao() {
 // Entrar na Biblioteca (pela barrinha de baixo): volta para o topo (idiomas).
 export async function irParaBiblioteca() {
   state.bib = bibPadrao();
+  carregarContagens(); // atualiza o detalhe por idioma (novas/dominado) em paralelo
   await carregarTodos();
 }
 
 // Recarregar mantendo o nível atual (após criar/editar/excluir um card).
 export async function recarregarBiblioteca() {
   if (!state.bib) state.bib = bibPadrao();
+  carregarContagens(); // mantém contagens/novas por idioma em dia
   await carregarTodos();
 }
 
@@ -91,7 +93,11 @@ export function construirBiblioteca() {
         : b.nivel === "idiomas"
         ? listaIdiomas(b)
         : b.nivel === "decks"
-        ? listaDecks(b)
+        ? el("div", {}, [
+            acoesIdioma(b),
+            el("div", { classe: "rotulo rotulo-decks", texto: "Baralhos" }),
+            listaDecks(b),
+          ])
         : listaCards(b.todos.filter((c) => c.deck_id === b.deckId))
     );
   }
@@ -104,13 +110,61 @@ export function construirBiblioteca() {
 }
 
 function listaIdiomas(b) {
-  const contagem = new Map();
-  for (const c of b.todos) contagem.set(c.language, (contagem.get(c.language) || 0) + 1);
+  const det = new Map((state.detalheIdiomas || []).map((d) => [d.idioma, d]));
+  const cods = [...new Set(b.todos.map((c) => c.language))].sort();
   const wrap = el("div", { classe: "lista" });
-  if (!contagem.size) wrap.append(vazio("Nenhum card ainda. Crie o primeiro! 👇"));
-  for (const [cod, n] of [...contagem].sort()) {
-    wrap.append(item(nomeIdioma(cod), `${n} card(s)`, () => abrirIdioma(cod)));
+  if (!cods.length) wrap.append(vazio("Nenhum card ainda. Crie o primeiro! 👇"));
+  for (const cod of cods) {
+    const d = det.get(cod);
+    const total = d ? d.total : b.todos.filter((c) => c.language === cod).length;
+    const pct = d && d.total ? Math.round((d.dominados / d.total) * 100) : 0;
+    const iniciado = !!(d && d.iniciado);
+    const sub = iniciado
+      ? `${total} cards · ${pct}% dominado · ${d.novos} novos p/ aprender`
+      : `${total} cards prontos para você`;
+    wrap.append(
+      el("button", { classe: "item-lista", onclick: () => abrirIdioma(cod) }, [
+        el("span", { classe: "item-lista__bandeira", texto: bandeiraIdioma(cod) }),
+        el("div", { classe: "item-lista__texto" }, [
+          el("div", { classe: "item-lista__titulo", texto: nomeIdioma(cod) }),
+          el("div", { classe: "item-lista__sub texto-suave", texto: sub }),
+        ]),
+        iniciado
+          ? el("span", { classe: "item-lista__seta" }, [icone("chevron-right")])
+          : el("span", { classe: "badge-comecar", texto: "Começar" }),
+      ])
+    );
   }
+  return wrap;
+}
+
+/* Ações do idioma (topo da página do idioma): aprender novas, praticar, surpresa. */
+function acoesIdioma(b) {
+  const d = (state.detalheIdiomas || []).find((x) => x.idioma === b.idioma);
+  const novosDisp = d ? d.novos : null;
+  const wrap = el("div", { classe: "acoes-idioma" });
+  if (novosDisp === null || novosDisp > 0) {
+    // Mostra o que a sessão REALMENTE entrega agora: limitado pelo teto do dia.
+    const n = novosDisp === null ? 0 : Math.min(novosDisp, state.tetoRestante ?? novosDisp);
+    wrap.append(
+      el("button", { classe: "btn btn-primario btn-largo", onclick: () => iniciarSessao([b.idioma], "novas", { origem: "biblioteca" }) }, [
+        icone("book"),
+        n > 0 ? ` Aprender palavras novas (${n})` : " Aprender palavras novas",
+      ])
+    );
+  }
+  wrap.append(
+    el("div", { classe: "linha-botoes" }, [
+      el("button", { classe: "btn", onclick: () => iniciarSessao([b.idioma], "pratica", { origem: "biblioteca", modoResposta: state.modoResposta, soDificeis: false }) }, [
+        icone("cards"),
+        " Praticar",
+      ]),
+      el("button", { classe: "btn", onclick: () => iniciarSessao([b.idioma], "pratica", { origem: "biblioteca", modoResposta: "multipla", soDificeis: false }) }, [
+        icone("dice-5"),
+        " Surpresa",
+      ]),
+    ])
+  );
   return wrap;
 }
 
@@ -170,7 +224,7 @@ function vazio(txt) {
 function tituloNivel(b) {
   if (b.busca) return "Busca";
   if (b.nivel === "idiomas") return "Biblioteca";
-  if (b.nivel === "decks") return nomeIdioma(b.idioma);
+  if (b.nivel === "decks") return `${bandeiraIdioma(b.idioma)} ${nomeIdioma(b.idioma)}`;
   return b.deckNome || "Cards";
 }
 
