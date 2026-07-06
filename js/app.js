@@ -16,13 +16,18 @@ import { construirBiblioteca, irParaBiblioteca } from "./library.js";
 import { renderEditor } from "./cards.js";
 import { tocarCard } from "./audio.js";
 
-const VERSAO = "Fluência v1.4";
+const VERSAO = "Fluência v1.5";
 
 iniciar();
 
 async function iniciar() {
   registrarRender(render);
   registrarServiceWorker();
+
+  // Esc fecha a gaveta lateral.
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape" && state.menuAberto) atualizar({ menuAberto: false });
+  });
 
   // Preferência trivial de interface: quais idiomas estão selecionados.
   try {
@@ -44,7 +49,8 @@ function render() {
   if (state.rota === "editor" && state.editor) return renderEditor(raiz);
 
   if (state.rota === "biblioteca") {
-    raiz.replaceChildren(...construirBiblioteca(), barraNav("biblioteca"));
+    const drawer = state.menuAberto ? [gaveta()] : [];
+    raiz.replaceChildren(...construirBiblioteca(), barraNav("biblioteca"), ...drawer);
     const busca = document.getElementById("bib-busca");
     if (state.bib && state.bib.busca && busca) {
       busca.focus();
@@ -61,18 +67,22 @@ function render() {
 
 function renderHome(raiz) {
   const barra = el("header", { classe: "barra-topo barra-topo--home" }, [
-    el("div", { classe: "marca" }, [logoMarca(), el("span", { classe: "barra-topo__titulo", texto: "Fluência" })]),
+    el("div", { classe: "marca-nav" }, [
+      botaoMenu(),
+      el("div", { classe: "marca" }, [logoMarca(), el("span", { classe: "barra-topo__titulo", texto: "Fluência" })]),
+    ]),
     el("span", { classe: `foguinho ${state.estudouHoje ? "" : "foguinho--apagado"}`, title: "Dias seguidos" }, [
       icone("flame"),
       el("span", { texto: String(state.streak) }),
     ]),
   ]);
 
+  const drawer = state.menuAberto ? [gaveta()] : [];
   const main = el("main", { classe: "conteudo" });
 
   if (state.carregando) {
     main.append(el("p", { classe: "texto-suave centro", texto: "Carregando…" }));
-    raiz.replaceChildren(barra, main, barraNav("home"));
+    raiz.replaceChildren(barra, main, barraNav("home"), ...drawer);
     return;
   }
 
@@ -88,7 +98,7 @@ function renderHome(raiz) {
   if (palavra) main.append(palavra);
   main.append(el("p", { classe: "versao texto-suave centro", texto: VERSAO }));
 
-  raiz.replaceChildren(barra, main, barraNav("home"));
+  raiz.replaceChildren(barra, main, barraNav("home"), ...drawer);
 }
 
 /* Cartão "Revisões": números do dia (revisões/novas), barra de progresso e,
@@ -405,6 +415,53 @@ function logoMarca() {
     '<circle cx="70" cy="78" r="3.4" fill="#f4efe6"/><circle cx="79" cy="78" r="3.4" fill="#f4efe6"/><circle cx="88" cy="78" r="3.4" fill="#f4efe6"/>' +
     "</svg>";
   return s;
+}
+
+/* ---------------- Gaveta lateral (menu) ---------------- */
+
+function botaoMenu() {
+  return el("button", { classe: "btn-menu", "aria-label": "Abrir menu", onclick: () => atualizar({ menuAberto: true }) }, [icone("menu-2")]);
+}
+
+// Menu deslizante. Seções atuais + espaço reservado para as futuras.
+// Adicionar uma seção nova = uma linha em `secoes`.
+function gaveta() {
+  const secoes = [
+    { rota: "home", rotulo: "Tela inicial", ic: "home", ir: irHome },
+    { rota: "biblioteca", rotulo: "Biblioteca", ic: "books", ir: irBiblioteca },
+  ];
+  const futuras = [
+    { rotulo: "Estatísticas", ic: "chart-bar" },
+    { rotulo: "Ajustes", ic: "settings" },
+  ];
+  const fechar = () => atualizar({ menuAberto: false });
+
+  const itens = secoes.map((s) =>
+    el(
+      "button",
+      { classe: `gaveta__item ${state.rota === s.rota ? "gaveta__item--ativo" : ""}`, onclick: () => { fechar(); s.ir(); } },
+      [el("span", { classe: "gaveta__item-ic" }, [icone(s.ic)]), el("span", { texto: s.rotulo })]
+    )
+  );
+  const itensFuturos = futuras.map((s) =>
+    el("div", { classe: "gaveta__item gaveta__item--futuro" }, [
+      el("span", { classe: "gaveta__item-ic" }, [icone(s.ic)]),
+      el("span", { texto: s.rotulo }),
+      el("span", { classe: "gaveta__breve", texto: "em breve" }),
+    ])
+  );
+
+  const painel = el("aside", { classe: "gaveta", role: "dialog", "aria-modal": "true", "aria-label": "Menu de navegação" }, [
+    el("div", { classe: "gaveta__topo" }, [
+      el("div", { classe: "marca" }, [logoMarca(), el("span", { classe: "barra-topo__titulo", texto: "Fluência" })]),
+      el("button", { classe: "gaveta__fechar", "aria-label": "Fechar menu", onclick: fechar }, [icone("x")]),
+    ]),
+    el("nav", { classe: "gaveta__lista" }, itens),
+    el("div", { classe: "gaveta__rotulo-futuro", texto: "Em breve" }),
+    el("div", { classe: "gaveta__lista" }, itensFuturos),
+  ]);
+
+  return el("div", { classe: "gaveta-wrap" }, [el("div", { classe: "gaveta-fundo", onclick: fechar }), painel]);
 }
 
 /* ---------------- Barrinha inferior ---------------- */

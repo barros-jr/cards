@@ -21,6 +21,7 @@ export const state = {
   estudouHoje: false, // já estudou hoje? (foguinho aceso)
   revisoesHoje: 0, // avaliações feitas hoje (barra de progresso do dia)
   mostrarFiltroIdiomas: false, // filtro de idiomas aberto no cartão Revisões?
+  menuAberto: false, // gaveta lateral de navegação aberta?
   semana: [], // últimos 7 dias: [{ date, label, count }]
   stats: { total: 0, dominados: 0 }, // números da Home
   palavraDia: null, // card destacado do dia

@@ -453,6 +453,47 @@ textarea.campo { min-height: 92px; resize: vertical; }
 .tab--ativa { color: var(--acento); }
 .tab__icone .ti { font-size: 1.45rem; }
 
+/* Gaveta lateral (menu de navegação) */
+.marca-nav { display: flex; align-items: center; gap: 4px; margin-left: -6px; }
+.btn-menu {
+  background: transparent; border: none; width: 44px; height: 44px; padding: 0; flex: none;
+  display: flex; align-items: center; justify-content: center; cursor: pointer;
+  color: var(--barra-texto); -webkit-tap-highlight-color: transparent;
+}
+.btn-menu .ti { font-size: 1.6rem; }
+.gaveta-wrap { position: fixed; inset: 0; z-index: 100; }
+.gaveta-fundo { position: absolute; inset: 0; background: rgba(40, 35, 28, 0.45); animation: gaveta-fade 0.2s ease; }
+.gaveta {
+  position: absolute; top: 0; left: 0; bottom: 0; width: 82%; max-width: 320px;
+  background: var(--cor-fundo); box-shadow: 2px 0 26px rgba(40, 35, 28, 0.22);
+  display: flex; flex-direction: column; padding-bottom: env(safe-area-inset-bottom);
+  animation: gaveta-slide 0.24s cubic-bezier(0.2, 0.7, 0.2, 1);
+}
+@keyframes gaveta-fade { from { opacity: 0; } to { opacity: 1; } }
+@keyframes gaveta-slide { from { transform: translateX(-100%); } to { transform: translateX(0); } }
+.gaveta__topo {
+  display: flex; align-items: center; justify-content: space-between;
+  background: var(--barra-bg); color: var(--barra-texto);
+  padding: calc(env(safe-area-inset-top) + 15px) 10px 15px 18px;
+}
+.gaveta__topo .barra-topo__titulo { color: var(--barra-texto); }
+.gaveta__fechar { background: transparent; border: none; width: 40px; height: 40px; display: flex; align-items: center; justify-content: center; color: var(--barra-texto); cursor: pointer; }
+.gaveta__fechar .ti { font-size: 1.4rem; }
+.gaveta__lista { display: flex; flex-direction: column; padding: 8px; gap: 2px; }
+.gaveta__item {
+  display: flex; align-items: center; gap: 14px; width: 100%; padding: 14px 16px;
+  background: transparent; border: none; border-radius: 12px; text-align: left; cursor: pointer;
+  font-family: var(--font-sans); font-size: 1rem; font-weight: 600; color: var(--cor-texto);
+  -webkit-tap-highlight-color: transparent;
+}
+.gaveta__item:active { background: var(--cor-superficie-2); }
+.gaveta__item--ativo { background: var(--marca-suave); color: var(--acento); }
+.gaveta__item-ic { display: flex; flex: none; }
+.gaveta__item-ic .ti { font-size: 1.4rem; }
+.gaveta__rotulo-futuro { font-size: 0.72rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; color: var(--cor-texto-suave); padding: 16px 20px 6px; }
+.gaveta__item--futuro { color: var(--cor-texto-suave); cursor: default; font-weight: 500; }
+.gaveta__breve { margin-left: auto; font-size: 0.66rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.03em; background: var(--cor-borda); color: var(--cor-texto-suave); border-radius: 999px; padding: 3px 9px; }
+
 /* Animação da chama */
 .foguinho-anim { animation: pulsar 1.2s ease-in-out infinite; }
 @keyframes pulsar { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.12); } }

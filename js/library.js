@@ -66,7 +66,7 @@ export function construirBiblioteca() {
   const barra = el("header", { classe: "barra-topo barra-topo--bib" }, [
     mostrarVoltar
       ? el("button", { classe: "btn-voltar", "aria-label": "Voltar", onclick: voltar }, [icone("arrow-left")])
-      : el("span", { classe: "btn-voltar-placeholder" }),
+      : el("button", { classe: "btn-menu", "aria-label": "Abrir menu", onclick: () => atualizar({ menuAberto: true }) }, [icone("menu-2")]),
     el("span", { classe: "barra-topo__titulo", texto: tituloNivel(b) }),
     el("span", { classe: "btn-voltar-placeholder" }),
   ]);
