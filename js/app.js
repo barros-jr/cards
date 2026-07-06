@@ -16,7 +16,7 @@ import { construirBiblioteca, irParaBiblioteca } from "./library.js";
 import { renderEditor } from "./cards.js";
 import { tocarCard } from "./audio.js";
 
-const VERSAO = "Fluência v1.2";
+const VERSAO = "Fluência v1.3";
 
 iniciar();
 
@@ -78,8 +78,7 @@ function renderHome(raiz) {
 
   const temIniciado = (state.detalheIdiomas || []).some((d) => d.iniciado);
   main.append(cartaoFoguinho());
-  if (temIniciado) main.append(cartaoContagem()); // sem idioma iniciado, só o convite à Biblioteca
-  main.append(blocoIdiomas());
+  main.append(temIniciado ? cartaoRevisoes() : conviteBiblioteca());
   main.append(controlesEstudo());
 
   main.append(el("div", { classe: "secao-divisor" }));
@@ -92,52 +91,86 @@ function renderHome(raiz) {
   raiz.replaceChildren(barra, main, barraNav("home"));
 }
 
-function cartaoContagem() {
+/* Cartão "Revisões": números do dia (revisões/novas), barra de progresso e,
+   no canto superior direito, o botão que abre a seleção de idiomas. */
+function cartaoRevisoes() {
   const due = state.pendentes.due;
-  if (due === 0) {
-    // Tudo em dia: estado de "vitória" no lugar do número.
-    return el("section", { classe: "cartao contagem contagem--emdia" }, [
-      el("div", { classe: "contagem__check" }, [icone("circle-check")]),
-      el("div", { classe: "contagem__rot", texto: "Tudo em dia por hoje!" }),
-      el("div", { classe: "contagem__detalhe texto-suave", texto: "Aprenda palavras novas ou volte amanhã." }),
-    ]);
-  }
-  return el("section", { classe: "cartao contagem" }, [
-    el("div", { classe: "contagem__num", texto: String(due) }),
-    el("div", { classe: "contagem__rot texto-suave", texto: due === 1 ? "revisão para hoje" : "revisões para hoje" }),
-  ]);
-}
+  const novos = state.pendentes.novos;
+  const feitas = state.revisoesHoje || 0;
+  const total = feitas + due;
+  const pct = total ? Math.round((feitas / total) * 100) : 100;
 
-/* ---------------- Idiomas (linhas selecionáveis) ---------------- */
-
-function blocoIdiomas() {
   const det = (state.detalheIdiomas || []).filter((d) => d.iniciado);
-  const naoIniciados = (state.detalheIdiomas || []).filter((d) => !d.iniciado);
-
-  // Ninguém começou ainda: a porta de entrada é a Biblioteca.
-  if (!det.length) {
-    return el("section", { classe: "cartao centro" }, [
-      el("div", { classe: "conclusao__emoji" }, [icone("books")]),
-      el("h2", { classe: "titulo-secao", texto: "Comece seu primeiro idioma" }),
-      el("p", { classe: "texto-suave", texto: "Escolha um idioma na Biblioteca e aprenda suas primeiras palavras." }),
-      el("button", { classe: "btn btn-primario btn-largo", onclick: irBiblioteca }, [icone("books"), " Ir para a Biblioteca"]),
-    ]);
-  }
-
-  const wrap = el("div", { classe: "bloco" });
-  const varios = det.length > 1;
-  wrap.append(
-    el("div", { classe: "rotulo-linha" }, [
-      el("div", { classe: "rotulo", texto: varios ? "Seus idiomas · toque para filtrar" : "Seu idioma" }),
-      varios ? el("button", { classe: "link-sutil", onclick: selecionarTodos, texto: "Todos" }) : null,
-    ])
-  );
-
   const sel = state.idiomasSelecionados || [];
   const iniciadosCods = det.map((d) => d.idioma);
   const efetiva = new Set((sel.length ? sel : iniciadosCods).filter((c) => iniciadosCods.includes(c)));
+  const filtrado = det.length > 1 && efetiva.size < det.length;
+
+  const cab = el("div", { classe: "rev__cab" }, [
+    el("span", { classe: "rev__icone" }, [icone("brain")]),
+    el("h2", { classe: "rev__titulo", texto: "Revisões" }),
+    det.length > 1
+      ? el(
+          "button",
+          {
+            classe: `rev__filtro ${state.mostrarFiltroIdiomas ? "rev__filtro--aberto" : ""}`,
+            "aria-label": "Escolher idiomas da revisão",
+            "aria-expanded": state.mostrarFiltroIdiomas ? "true" : "false",
+            onclick: () => atualizar({ mostrarFiltroIdiomas: !state.mostrarFiltroIdiomas }),
+          },
+          [icone("adjustments-horizontal"), filtrado ? el("span", { classe: "rev__filtro-dot" }) : null]
+        )
+      : null,
+  ]);
+
+  const tiles = el("div", { classe: "rev__tiles" }, [
+    el("div", { classe: "rev__tile" }, [
+      el("span", { classe: "rev__tile-icone rev__tile-icone--rev" }, [icone("cards")]),
+      el("div", {}, [
+        el("div", { classe: "rev__tile-num", texto: String(due) }),
+        el("div", { classe: "rev__tile-rot", texto: due === 1 ? "revisão" : "revisões" }),
+      ]),
+    ]),
+    el("div", { classe: "rev__tile" }, [
+      el("span", { classe: "rev__tile-icone rev__tile-icone--novas" }, [icone("book")]),
+      el("div", {}, [
+        el("div", { classe: "rev__tile-num", texto: String(novos) }),
+        el("div", { classe: "rev__tile-rot", texto: novos === 1 ? "palavra nova" : "palavras novas" }),
+      ]),
+    ]),
+  ]);
+
+  const prog = el("div", { classe: "rev__prog" }, [
+    el("div", { classe: "rev__prog-cab" }, [
+      icone("history"),
+      el("span", { texto: "Revisões de hoje" }),
+      el("span", { classe: "rev__prog-pct", texto: `${pct}%` }),
+    ]),
+    el("div", { classe: "rev__barra" }, [el("div", { classe: "rev__barra-cheio", style: `width:${pct}%` })]),
+    el("div", {
+      classe: "rev__prog-sub texto-suave",
+      texto: total
+        ? `${feitas} ${feitas === 1 ? "feita" : "feitas"} de ${total} no total`
+        : "Nenhuma revisão hoje — tudo em dia ✓",
+    }),
+  ]);
+
+  const card = el("section", { classe: "cartao rev" }, [cab, tiles, prog]);
+  if (state.mostrarFiltroIdiomas && det.length > 1) card.append(filtroIdiomas(det, efetiva));
+  return card;
+}
+
+/* Área de seleção de idiomas (abre pelo botão do cartão Revisões). */
+function filtroIdiomas(det, efetiva) {
+  const wrap = el("div", { classe: "rev__filtro-area" });
+  wrap.append(
+    el("div", { classe: "rotulo-linha" }, [
+      el("div", { classe: "rotulo", texto: "Idiomas da revisão" }),
+      el("button", { classe: "link-sutil", onclick: selecionarTodos, texto: "Todos" }),
+    ])
+  );
   const filtro = el("div", { classe: "filtro-idiomas" });
-  for (const d of det) filtro.append(chipIdioma(d, efetiva.has(d.idioma), varios));
+  for (const d of det) filtro.append(chipIdioma(d, efetiva.has(d.idioma), true));
   wrap.append(filtro);
 
   // Aviso de interferência: espanhol + italiano são muito parecidos.
@@ -153,6 +186,7 @@ function blocoIdiomas() {
     );
   }
 
+  const naoIniciados = (state.detalheIdiomas || []).filter((d) => !d.iniciado);
   if (naoIniciados.length) {
     const nomes = naoIniciados.map((d) => nomeIdioma(d.idioma));
     const listaNomes = nomes.length > 1 ? nomes.slice(0, -1).join(", ") + " e " + nomes[nomes.length - 1] : nomes[0];
@@ -162,6 +196,18 @@ function blocoIdiomas() {
   }
   return wrap;
 }
+
+/* Primeiro uso: nenhum idioma iniciado — a porta de entrada é a Biblioteca. */
+function conviteBiblioteca() {
+  return el("section", { classe: "cartao centro" }, [
+    el("div", { classe: "conclusao__emoji" }, [icone("books")]),
+    el("h2", { classe: "titulo-secao", texto: "Comece seu primeiro idioma" }),
+    el("p", { classe: "texto-suave", texto: "Escolha um idioma na Biblioteca e aprenda suas primeiras palavras." }),
+    el("button", { classe: "btn btn-primario btn-largo", onclick: irBiblioteca }, [icone("books"), " Ir para a Biblioteca"]),
+  ]);
+}
+
+/* ---------------- Idiomas (linhas selecionáveis) ---------------- */
 
 // Bandeira redonda com contador de revisões. Ativa = aro na cor do idioma;
 // inativa = cinza/apagada. Badge verde com o nº de revisões, ou ✓ se em dia.
@@ -220,12 +266,6 @@ function controlesEstudo() {
   if (!iniciados.length) return el("div", {}); // sem idioma iniciado, a Home só convida à Biblioteca
 
   const wrap = el("div", {});
-  wrap.append(
-    el("div", { classe: "bloco" }, [
-      el("div", { classe: "rotulo", texto: "Como responder?" }),
-      el("div", { classe: "segmentos" }, [segResp("Ver", "ver"), segResp("Digitar", "digitar"), segResp("Múltipla", "multipla"), segResp("Ouvir", "ouvir")]),
-    ])
-  );
   wrap.append(el("div", { classe: "bloco" }, [chipDificeis()]));
 
   const botoes = el("div", { classe: "bloco-estudar" });
@@ -239,11 +279,6 @@ function controlesEstudo() {
   }
   wrap.append(botoes);
   return wrap;
-}
-
-function segResp(rotulo, valor) {
-  const ativo = state.modoResposta === valor;
-  return el("button", { classe: `segmento ${ativo ? "segmento--ativo" : ""}`, onclick: () => { if (state.modoResposta !== valor) atualizar({ modoResposta: valor }); }, texto: rotulo });
 }
 
 function chipDificeis() {
@@ -263,7 +298,7 @@ function aoRevisar() {
   const sel = selecaoIniciados();
   if (!sel.length) return; // seleção vazia: nada a revisar
   if (state.pendentes.due === 0 && !state.soDificeis) return;
-  iniciarSessao(sel, "revisao", { modoResposta: state.modoResposta, soDificeis: state.soDificeis });
+  iniciarSessao(sel, "revisao", { modoResposta: "ver", soDificeis: state.soDificeis });
 }
 
 function aoAprender() {

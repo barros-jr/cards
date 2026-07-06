@@ -155,7 +155,7 @@ function acoesIdioma(b) {
   }
   wrap.append(
     el("div", { classe: "linha-botoes" }, [
-      el("button", { classe: "btn", onclick: () => iniciarSessao([b.idioma], "pratica", { origem: "biblioteca", modoResposta: state.modoResposta, soDificeis: false }) }, [
+      el("button", { classe: "btn", onclick: () => iniciarSessao([b.idioma], "pratica", { origem: "biblioteca", modoResposta: "ver", soDificeis: false }) }, [
         icone("cards"),
         " Praticar",
       ]),

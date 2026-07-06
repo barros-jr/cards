@@ -151,10 +151,40 @@ body {
 .foguinho .ti { font-size: 1.25rem; color: var(--accent); }
 .foguinho--apagado .ti { color: var(--barra-texto); opacity: 0.55; }
 
-.contagem { text-align: center; padding: 22px 20px; }
-.contagem__num { font-family: var(--font-serif); font-size: 4rem; font-weight: 500; color: var(--acento); line-height: 1; }
-.contagem__rot { margin-top: 4px; font-size: 0.98rem; }
-.contagem__detalhe { margin-top: 8px; font-size: 0.88rem; }
+/* Cartão Revisões (números do dia + progresso + filtro de idiomas) */
+.rev { text-align: left; padding: 18px 16px; }
+.rev__cab { display: flex; align-items: center; gap: 10px; }
+.rev__icone { width: 36px; height: 36px; border-radius: 11px; background: var(--accent-suave); display: flex; align-items: center; justify-content: center; flex: none; }
+.rev__icone .ti { font-size: 1.3rem; color: var(--accent); }
+.rev__titulo { font-family: var(--font-serif); font-size: 1.35rem; font-weight: 600; margin: 0; flex: 1; }
+.rev__filtro {
+  position: relative; background: none; border: none; padding: 7px; cursor: pointer;
+  color: var(--cor-texto-suave); display: flex; border-radius: 10px;
+  -webkit-tap-highlight-color: transparent;
+}
+.rev__filtro .ti { font-size: 1.4rem; }
+.rev__filtro--aberto { background: var(--marca-suave); color: var(--acento); }
+.rev__filtro-dot { position: absolute; top: 5px; right: 5px; width: 8px; height: 8px; border-radius: 50%; background: var(--accent); }
+.rev__tiles { display: flex; gap: 10px; margin-top: 14px; }
+.rev__tile {
+  flex: 1; display: flex; align-items: center; gap: 11px; min-width: 0;
+  background: var(--cor-superficie-2); border: 1px solid var(--cor-borda);
+  border-radius: 14px; padding: 12px 13px;
+}
+.rev__tile-icone { display: flex; flex: none; }
+.rev__tile-icone .ti { font-size: 1.75rem; }
+.rev__tile-icone--rev .ti { color: var(--acento); }
+.rev__tile-icone--novas .ti { color: var(--lang-en); }
+.rev__tile-num { font-family: var(--font-serif); font-size: 1.65rem; font-weight: 600; color: var(--accent); line-height: 1.05; }
+.rev__tile-rot { font-size: 0.82rem; font-weight: 600; margin-top: 1px; }
+.rev__prog { margin-top: 16px; }
+.rev__prog-cab { display: flex; align-items: center; gap: 7px; font-weight: 700; font-size: 0.95rem; }
+.rev__prog-cab .ti { font-size: 1.15rem; color: var(--lang-en); }
+.rev__prog-pct { margin-left: auto; color: var(--lang-en); font-weight: 700; }
+.rev__barra { height: 7px; border-radius: 4px; background: var(--cor-borda); margin-top: 9px; overflow: hidden; }
+.rev__barra-cheio { height: 100%; border-radius: 4px; background: var(--acento); transition: width 0.3s; }
+.rev__prog-sub { font-size: 0.85rem; margin-top: 7px; }
+.rev__filtro-area { margin-top: 16px; border-top: 1px solid var(--cor-borda); padding-top: 13px; }
 
 .bloco { margin-top: 16px; }
 .rotulo { font-size: 0.8rem; font-weight: 600; letter-spacing: 0.02em; text-transform: uppercase; margin-bottom: 8px; color: var(--cor-texto-suave); }
@@ -219,12 +249,6 @@ body {
 /* Bandeiras (emoji) */
 .item-lista__bandeira { font-size: 1.45rem; line-height: 1; flex: none; margin-right: 2px; }
 .flashcard__bandeira { font-size: 1rem; line-height: 1; }
-
-/* Cartão "tudo em dia" */
-.contagem--emdia { padding: 26px 20px; }
-.contagem__check { display: flex; justify-content: center; margin-bottom: 6px; }
-.contagem__check .ti { font-size: 2.6rem; color: var(--acento); }
-.contagem--emdia .contagem__rot { font-weight: 700; font-size: 1.15rem; color: var(--cor-texto); }
 
 /* Botão "aprender palavras novas" (secundário, mas convidativo) */
 .btn-aprender { width: 100%; margin-top: 10px; background: var(--marca-suave); border-color: transparent; color: var(--acento); }

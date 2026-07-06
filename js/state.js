@@ -19,6 +19,8 @@ export const state = {
   totalIdioma: 0, // nº de cards do idioma (modo Prática livre)
   streak: 0, // foguinho (dias seguidos)
   estudouHoje: false, // já estudou hoje? (foguinho aceso)
+  revisoesHoje: 0, // avaliações feitas hoje (barra de progresso do dia)
+  mostrarFiltroIdiomas: false, // filtro de idiomas aberto no cartão Revisões?
   semana: [], // últimos 7 dias: [{ date, label, count }]
   stats: { total: 0, dominados: 0 }, // números da Home
   palavraDia: null, // card destacado do dia

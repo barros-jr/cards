@@ -138,7 +138,7 @@ export async function carregarContagens() {
   const introduzidos = await contarNovosHoje();
   const tetoRestante = Math.max(0, TETO_CARDS_NOVOS - introduzidos);
   const novos = Math.min(novosDisponiveis, tetoRestante);
-  const { streak, estudouHoje } = await resumoFoguinho();
+  const { streak, estudouHoje, feitasHoje } = await resumoFoguinho();
   atualizar({
     idiomas,
     detalheIdiomas,
@@ -148,6 +148,7 @@ export async function carregarContagens() {
     totalIdioma: totalSel,
     streak,
     estudouHoje,
+    revisoesHoje: feitasHoje,
   });
 }
 
@@ -284,9 +285,11 @@ async function resumoFoguinho() {
     .eq("user_id", UID)
     .order("date", { ascending: false })
     .limit(400);
-  if (error || !data || !data.length) return { streak: 0, estudouHoje: false };
+  if (error || !data || !data.length) return { streak: 0, estudouHoje: false, feitasHoje: 0 };
   const dias = new Set(data.filter((r) => (r.reviews_done || 0) > 0).map((r) => r.date));
-  const estudouHoje = dias.has(dataLocalISO(new Date()));
+  const hojeISO = dataLocalISO(new Date());
+  const feitasHoje = (data.find((r) => r.date === hojeISO) || {}).reviews_done || 0;
+  const estudouHoje = dias.has(hojeISO);
   let streak = 0;
   const d = new Date();
   d.setHours(0, 0, 0, 0);
@@ -295,7 +298,7 @@ async function resumoFoguinho() {
     streak++;
     d.setDate(d.getDate() - 1);
   }
-  return { streak, estudouHoje };
+  return { streak, estudouHoje, feitasHoje };
 }
 
 /* ---------------- Sessão (controle) ---------------- */
