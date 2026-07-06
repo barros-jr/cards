@@ -16,7 +16,7 @@ import { construirBiblioteca, irParaBiblioteca } from "./library.js";
 import { renderEditor } from "./cards.js";
 import { tocarCard } from "./audio.js";
 
-const VERSAO = "Fluência v1.3";
+const VERSAO = "Fluência v1.4";
 
 iniciar();
 
@@ -95,7 +95,6 @@ function renderHome(raiz) {
    no canto superior direito, o botão que abre a seleção de idiomas. */
 function cartaoRevisoes() {
   const due = state.pendentes.due;
-  const novos = state.pendentes.novos;
   const feitas = state.revisoesHoje || 0;
   const total = feitas + due;
   const pct = total ? Math.round((feitas / total) * 100) : 100;
@@ -123,22 +122,25 @@ function cartaoRevisoes() {
       : null,
   ]);
 
-  const tiles = el("div", { classe: "rev__tiles" }, [
-    el("div", { classe: "rev__tile" }, [
-      el("span", { classe: "rev__tile-icone rev__tile-icone--rev" }, [icone("cards")]),
-      el("div", {}, [
-        el("div", { classe: "rev__tile-num", texto: String(due) }),
-        el("div", { classe: "rev__tile-rot", texto: due === 1 ? "revisão" : "revisões" }),
-      ]),
-    ]),
-    el("div", { classe: "rev__tile" }, [
-      el("span", { classe: "rev__tile-icone rev__tile-icone--novas" }, [icone("book")]),
-      el("div", {}, [
-        el("div", { classe: "rev__tile-num", texto: String(novos) }),
-        el("div", { classe: "rev__tile-rot", texto: novos === 1 ? "palavra nova" : "palavras novas" }),
-      ]),
-    ]),
-  ]);
+  // O próprio "box" das revisões É o botão de iniciar. Sem revisões: estado calmo.
+  const temRevisao = due > 0;
+  const alvo = temRevisao
+    ? el(
+        "button",
+        { classe: "rev__alvo", onclick: aoRevisar, "aria-label": `Revisar ${due} ${due === 1 ? "card" : "cards"} agora` },
+        [
+          el("span", { classe: "rev__alvo-icone" }, [icone("cards")]),
+          el("div", { classe: "rev__alvo-txt" }, [
+            el("div", { classe: "rev__alvo-num", texto: String(due) }),
+            el("div", { classe: "rev__alvo-rot", texto: due === 1 ? "revisão para hoje" : "revisões para hoje" }),
+          ]),
+          el("span", { classe: "rev__alvo-play" }, [icone("player-play")]),
+        ]
+      )
+    : el("div", { classe: "rev__alvo rev__alvo--emdia" }, [
+        el("span", { classe: "rev__alvo-icone" }, [icone("circle-check")]),
+        el("div", { classe: "rev__alvo-txt" }, [el("div", { classe: "rev__alvo-rot", texto: "Tudo em dia por hoje!" })]),
+      ]);
 
   const prog = el("div", { classe: "rev__prog" }, [
     el("div", { classe: "rev__prog-cab" }, [
@@ -155,7 +157,9 @@ function cartaoRevisoes() {
     }),
   ]);
 
-  const card = el("section", { classe: "cartao rev" }, [cab, tiles, prog]);
+  const card = el("section", { classe: "cartao rev" }, [cab, alvo]);
+  if (temRevisao) card.append(el("div", { classe: "rev__mod" }, [chipDificeis()]));
+  card.append(prog);
   if (state.mostrarFiltroIdiomas && det.length > 1) card.append(filtroIdiomas(det, efetiva));
   return card;
 }
@@ -265,20 +269,11 @@ function controlesEstudo() {
   const iniciados = (state.detalheIdiomas || []).filter((d) => d.iniciado);
   if (!iniciados.length) return el("div", {}); // sem idioma iniciado, a Home só convida à Biblioteca
 
-  const wrap = el("div", {});
-  wrap.append(el("div", { classe: "bloco" }, [chipDificeis()]));
-
-  const botoes = el("div", { classe: "bloco-estudar" });
-  if (state.pendentes.due > 0 || state.soDificeis) {
-    botoes.append(el("button", { classe: "btn btn-primario btn-estudar", onclick: aoRevisar }, [icone("player-play"), " Revisar agora"]));
-  }
-  if (state.pendentes.novos > 0) {
-    botoes.append(
-      el("button", { classe: "btn btn-aprender", onclick: aoAprender }, [icone("book"), ` Aprender palavras novas (${state.pendentes.novos})`])
-    );
-  }
-  wrap.append(botoes);
-  return wrap;
+  // "Revisar agora" foi absorvido pelo box do cartão; aqui fica só o atalho de novas.
+  if (state.pendentes.novos <= 0) return el("div", {});
+  return el("div", { classe: "bloco-estudar" }, [
+    el("button", { classe: "btn btn-aprender", onclick: aoAprender }, [icone("book"), ` Aprender palavras novas (${state.pendentes.novos})`]),
+  ]);
 }
 
 function chipDificeis() {

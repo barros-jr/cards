@@ -165,18 +165,28 @@ body {
 .rev__filtro .ti { font-size: 1.4rem; }
 .rev__filtro--aberto { background: var(--marca-suave); color: var(--acento); }
 .rev__filtro-dot { position: absolute; top: 5px; right: 5px; width: 8px; height: 8px; border-radius: 50%; background: var(--accent); }
-.rev__tiles { display: flex; gap: 10px; margin-top: 14px; }
-.rev__tile {
-  flex: 1; display: flex; align-items: center; gap: 11px; min-width: 0;
+/* O box de revisões É o botão de iniciar */
+.rev__alvo {
+  width: 100%; display: flex; align-items: center; gap: 14px; text-align: left;
   background: var(--cor-superficie-2); border: 1px solid var(--cor-borda);
-  border-radius: 14px; padding: 12px 13px;
+  border-radius: 14px; padding: 15px 16px; margin-top: 14px;
+  cursor: pointer; -webkit-tap-highlight-color: transparent;
+  transition: transform 0.1s, border-color 0.15s, box-shadow 0.15s;
 }
-.rev__tile-icone { display: flex; flex: none; }
-.rev__tile-icone .ti { font-size: 1.75rem; }
-.rev__tile-icone--rev .ti { color: var(--acento); }
-.rev__tile-icone--novas .ti { color: var(--lang-en); }
-.rev__tile-num { font-family: var(--font-serif); font-size: 1.65rem; font-weight: 600; color: var(--accent); line-height: 1.05; }
-.rev__tile-rot { font-size: 0.82rem; font-weight: 600; margin-top: 1px; }
+button.rev__alvo:active { transform: scale(0.99); }
+button.rev__alvo:hover { border-color: var(--acento); box-shadow: var(--sombra); }
+.rev__alvo-icone { display: flex; flex: none; }
+.rev__alvo-icone .ti { font-size: 2rem; color: var(--acento); }
+.rev__alvo-txt { flex: 1; min-width: 0; }
+.rev__alvo-num { font-family: var(--font-serif); font-size: 2.4rem; font-weight: 600; color: var(--accent); line-height: 1; }
+.rev__alvo-rot { font-size: 0.9rem; font-weight: 600; margin-top: 2px; }
+.rev__alvo-play {
+  flex: none; width: 44px; height: 44px; border-radius: 50%; background: var(--acento);
+  color: #fff; display: flex; align-items: center; justify-content: center;
+}
+.rev__alvo-play .ti { font-size: 1.35rem; margin-left: 2px; }
+.rev__alvo--emdia { cursor: default; }
+.rev__mod { margin-top: 12px; }
 .rev__prog { margin-top: 16px; }
 .rev__prog-cab { display: flex; align-items: center; gap: 7px; font-weight: 700; font-size: 0.95rem; }
 .rev__prog-cab .ti { font-size: 1.15rem; color: var(--lang-en); }
@@ -273,8 +283,6 @@ body {
 .segmento--ativo { background: var(--cor-superficie); color: var(--acento); box-shadow: 0 1px 3px rgba(40, 35, 28, 0.1); }
 
 .bloco-estudar { margin-top: 22px; }
-.btn-estudar { width: 100%; height: 56px; font-size: 1.08rem; }
-.btn-surpresa { width: 100%; margin-top: 10px; background: var(--cor-superficie); }
 
 /* Cartão do foguinho */
 .foguinho-card { display: flex; align-items: center; gap: 16px; }
